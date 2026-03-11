@@ -40,3 +40,20 @@ yarn-error.*
 /ios
 /android
 Documents/
+
+# local IDE settings
+.idea/
+.vscode/
+
+# backend (not ready to push yet)
+backend/
+
+# notebook local runtime/data artifacts
+Notebooks/
+Notebooks/venv/
+Notebooks/models/
+Notebooks/test_images/
+
+# local python cache/build
+__pycache__/
+*.pyc
