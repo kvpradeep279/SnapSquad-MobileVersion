@@ -49,7 +49,9 @@ Documents/
 backend/
 
 # notebook local runtime/data artifacts
-Notebooks/
+Notebooks/*
+!Notebooks/*.ipynb
+!Notebooks/*.json
 Notebooks/venv/
 Notebooks/models/
 Notebooks/test_images/
