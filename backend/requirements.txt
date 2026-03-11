@@ -1,0 +1,44 @@
+# ══════════════════════════════════════════════════════════════════
+# SnapSquad Backend — Python Dependencies
+# ══════════════════════════════════════════════════════════════════
+# Architecture: Server is a BLIND COORDINATOR. Zero ML models.
+# Detection (SCRFD) and embedding (MobileFaceNet) run ON DEVICE.
+# Server only runs HDBSCAN clustering (pure math via numpy).
+# ══════════════════════════════════════════════════════════════════
+
+# ── Web Framework ────────────────────────────────────────────────
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.17        # For file uploads (encrypted blobs)
+
+# ── Database (PostgreSQL + pgvector for embeddings) ──────────────
+sqlalchemy==2.0.36
+psycopg[binary]==3.2.3          # PostgreSQL driver (async-ready)
+alembic==1.14.0                 # Schema migrations (production)
+
+# ── Validation & Config ──────────────────────────────────────────
+pydantic==2.10.3
+pydantic-settings==2.7.0        # .env file loading
+
+# ── Auth ─────────────────────────────────────────────────────────
+passlib[bcrypt]==1.7.4           # Password hashing
+python-jose[cryptography]==3.3.0 # JWT tokens
+
+# ── Background Jobs ──────────────────────────────────────────────
+redis==5.2.0                     # Job queue backend
+rq==1.16.2                       # Simple job queue (Redis Queue)
+
+# ── Clustering (the ONLY "AI" on the server — pure math) ────────
+numpy==2.1.3                     # Matrix operations for cosine distance
+hdbscan==0.8.40                  # Hierarchical density clustering
+scikit-learn>=1.3.0              # Required by hdbscan
+
+# ── Cloud Storage (optional — for encrypted blob hosting) ────────
+cloudinary>=1.36.0               # 25GB free tier for encrypted photo blobs
+
+# ══════════════════════════════════════════════════════════════════
+# REMOVED (server does NOT run ML models):
+#   opencv-python    — image processing (done on device)
+#   insightface      — face detection + embedding (done on device)
+#   onnxruntime      — ONNX model inference (done on device)
+# ══════════════════════════════════════════════════════════════════

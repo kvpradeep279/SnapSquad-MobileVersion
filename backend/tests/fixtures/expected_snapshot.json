@@ -1,0 +1,10 @@
+{
+  "summary": {
+    "n_faces": 107,
+    "n_clusters": 10,
+    "n_clustered": 80,
+    "n_unidentified": 27,
+    "clustered_pct": 74.8
+  },
+  "notes": "Reference snapshot from notebook v2.1 + rescue2 run"
+}

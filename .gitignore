@@ -32,6 +32,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
 
 # typescript
 *.tsbuildinfo
@@ -45,17 +46,38 @@ Documents/
 .idea/
 .vscode/
 
-# backend (not ready to push yet)
-backend/
+# ── Backend ──────────────────────────────────────────
+# Secrets (NEVER commit real .env files)
+backend/.env
 
-# notebook local runtime/data artifacts
+# Python bytecode / cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Backend local data (encrypted blobs, pipeline output)
+backend/data/
+backend/pipeline_output/
+
+# Backend build/dist artifacts
+backend/*.egg-info/
+backend/dist/
+backend/build/
+
+# ── Notebooks ────────────────────────────────────────
+# Keep .ipynb and .json configs, ignore heavy local files
 Notebooks/*
 !Notebooks/*.ipynb
 !Notebooks/*.json
 Notebooks/venv/
 Notebooks/models/
 Notebooks/test_images/
+Notebooks/pipeline_output/
+Notebooks/pipeline_v2_output/
 
-# local python cache/build
-__pycache__/
+# ── General Python ───────────────────────────────────
+*.egg
+*.whl
+.venv/
+venv/
 *.pyc

@@ -1,0 +1,5 @@
+notebook 
+opencv-python 
+numpy 
+onnxruntime 
+matplotlib
