@@ -6,7 +6,8 @@
     "orientation": "portrait",
     "plugins": [
       "expo-dev-client",
-      "react-native-fast-tflite"
+      "react-native-fast-tflite",
+      "expo-font"
     ],
     "android": {
       "package": "com.yourteam.snapsquad",

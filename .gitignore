@@ -81,3 +81,7 @@ Notebooks/pipeline_v2_output/
 .venv/
 venv/
 *.pyc
+
+# ── AI Agents / Design ───────────────────────────────
+frontend_Ideations/
+.gemini/
