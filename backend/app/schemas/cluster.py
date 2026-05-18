@@ -10,7 +10,7 @@ class ClusterDTO(BaseModel):
     cluster_label: int
     display_name: str
     face_count: int
-    # V2: may include representative_face_thumbnail_url
+    representative_face: dict | None = None  # {"photo_id": str, "bbox": [float, float, float, float]}
 
 
 class ClustersResponse(BaseModel):

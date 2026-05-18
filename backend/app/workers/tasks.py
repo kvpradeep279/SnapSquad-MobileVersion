@@ -84,7 +84,55 @@ def process_album_job(job_id: str, album_id: str) -> None:
         job.stage = "clustering"
         db.commit()
 
-        output = run_pipeline_on_embeddings(embedding_dicts)
+        # Smart fallback: if all faces come from a single unique photo,
+        # HDBSCAN cannot meaningfully cluster (each face appears only once).
+        # In that case, treat every face as its own unique person.
+        unique_photo_ids = {d["photo_id"] for d in embedding_dicts}
+        
+        if len(unique_photo_ids) == 1:
+            # Single photo: assign each face its own cluster label (0, 1, 2, ...)
+            import numpy as np
+            labels_list = list(range(len(embedding_dicts)))
+            cluster_counts = {i: 1 for i in labels_list}
+            output = {
+                "labels": labels_list,
+                "cluster_counts": cluster_counts,
+                "summary": {
+                    "n_faces": len(embedding_dicts),
+                    "n_clusters": len(embedding_dicts),
+                    "n_clustered": len(embedding_dicts),
+                    "n_unidentified": 0,
+                    "clustered_pct": 100.0,
+                    "stats": {"single_photo_fallback": True},
+                },
+                "face_assignments": [
+                    {"photo_id": d["photo_id"], "face_index": d["face_index"], "cluster_label": i}
+                    for i, d in enumerate(embedding_dicts)
+                ],
+            }
+        else:
+            output = run_pipeline_on_embeddings(embedding_dicts)
+
+        # ── Promote orphaned faces to their own clusters ──────────
+        # Any face HDBSCAN couldn't group (label == -1) gets promoted
+        # to a unique cluster instead of being stuck in "Unidentified."
+        # This ensures every person in a photo gets their own slot,
+        # even if they only appear once across the entire album.
+        labels_list = output["labels"]
+        cluster_counts = dict(output["cluster_counts"])
+        
+        if -1 in cluster_counts:
+            next_label = max((k for k in cluster_counts if k != -1), default=-1) + 1
+            promoted = 0
+            for i, lbl in enumerate(labels_list):
+                if lbl == -1:
+                    labels_list[i] = next_label
+                    cluster_counts[next_label] = 1
+                    next_label += 1
+                    promoted += 1
+            del cluster_counts[-1]
+            output["labels"] = labels_list
+            output["cluster_counts"] = cluster_counts
 
         # ── Stage 4: Write cluster labels back to face_detections ─
         job.stage = "saving_results"
@@ -97,13 +145,53 @@ def process_album_job(job_id: str, album_id: str) -> None:
         # ── Stage 5: Rebuild Cluster summary table ────────────────
         db.execute(delete(Cluster).where(Cluster.album_id == album_id))
 
+        from app.models.global_identity import GlobalIdentity
+        import numpy as np
+
+        global_ids = db.query(GlobalIdentity).filter(GlobalIdentity.user_id == album.user_id).all()
+        # Pre-parse embeddings for quick matching
+        global_memory = []
+        for gid in global_ids:
+            try:
+                emb = np.array(json.loads(gid.embedding_json))
+                global_memory.append({"name": gid.name, "embedding": emb})
+            except Exception:
+                pass
+
         for label, count in output["cluster_counts"].items():
             if int(label) == -1:
                 continue
+                
+            display_name = f"Person {label}"
+            
+            # --- Auto-Tagging Check ---
+            if global_memory:
+                # Find faces in this cluster
+                cluster_faces = [fd for i, fd in enumerate(face_dets) if int(labels[i]) == int(label)]
+                if cluster_faces:
+                    # Compute cluster centroid
+                    c_embeddings = [json.loads(fd.embedding_json) for fd in cluster_faces]
+                    centroid = np.mean(c_embeddings, axis=0)
+                    centroid = centroid / (np.linalg.norm(centroid) + 1e-10)
+                    
+                    # Find best match
+                    best_match = None
+                    best_sim = -1
+                    for gm in global_memory:
+                        sim = np.dot(centroid, gm["embedding"])
+                        if sim > best_sim:
+                            best_sim = sim
+                            best_match = gm["name"]
+                            
+                    # If similarity is very high, auto-tag it!
+                    if best_sim > 0.85 and best_match:
+                        display_name = best_match
+            # --------------------------
+
             db.add(Cluster(
                 album_id=album_id,
                 cluster_label=int(label),
-                display_name=f"Person {label}",
+                display_name=display_name,
                 face_count=int(count),
             ))
 

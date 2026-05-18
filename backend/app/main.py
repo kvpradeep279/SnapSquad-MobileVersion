@@ -24,6 +24,7 @@ STARTUP:
 """
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -48,6 +49,15 @@ def create_app() -> FastAPI:
             alembic upgrade head
         """
         Base.metadata.create_all(bind=engine)
+
+    # ── CORS (allow mobile app to connect) ────────────────────────
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],  # Restrict in production
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # ── Register API routes ──────────────────────────────────────
     app.include_router(api_router, prefix="/api/v1")

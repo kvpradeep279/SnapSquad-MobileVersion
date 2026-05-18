@@ -10,25 +10,24 @@ from datetime import datetime, timedelta, timezone
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 
 from app.core.config import settings
-
-# ── Password hashing ─────────────────────────────────────────────
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # ── Bearer token scheme ──────────────────────────────────────────
 bearer_scheme = HTTPBearer(auto_error=False)
 
-
 def hash_password(password: str) -> str:
     """Hash a plaintext password using bcrypt."""
-    return pwd_context.hash(password)
+    salt = bcrypt.gensalt()
+    # bcrypt expects bytes, so we encode the password to utf-8 before hashing
+    hashed_password = bcrypt.hashpw(password.encode("utf-8"), salt)
+    return hashed_password.decode("utf-8")
 
 
 def verify_password(password: str, password_hash: str) -> bool:
     """Verify a plaintext password against a bcrypt hash."""
-    return pwd_context.verify(password, password_hash)
+    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
 def create_access_token(subject: str) -> str:

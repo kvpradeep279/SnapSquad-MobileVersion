@@ -9,7 +9,7 @@ import { palette, getFont } from '../theme';
 import { RootStackParamList } from '../types';
 
 interface TabProps {
-  activeTab: 'home' | 'clusters' | 'upload' | 'export' | 'settings';
+  activeTab: 'home' | 'clusters' | 'upload' | 'export' | 'people';
 }
 
 export default function MockupBottomTabs({ activeTab }: TabProps) {
@@ -31,7 +31,7 @@ export default function MockupBottomTabs({ activeTab }: TabProps) {
         <Text style={[styles.tabLabel, getStyle('home')]}>Home</Text>
       </TouchableOpacity>
 
-      {/* CLUSTERS (Results) */}
+      {/* CLUSTERS */}
       <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Clusters' as any)}>
         <View style={styles.tabIcon}>
           <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -43,6 +43,7 @@ export default function MockupBottomTabs({ activeTab }: TabProps) {
         </View>
         <Text style={[styles.tabLabel, getStyle('clusters')]}>Clusters</Text>
       </TouchableOpacity>
+
 
       {/* UPLOAD (Center Button) */}
       <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Upload' as any)}>
@@ -69,15 +70,16 @@ export default function MockupBottomTabs({ activeTab }: TabProps) {
         <Text style={[styles.tabLabel, getStyle('export')]}>Export</Text>
       </TouchableOpacity>
 
-      {/* SETTINGS */}
-      <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Settings' as any)}>
+      {/* PEOPLE */}
+      <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('People' as any)}>
         <View style={styles.tabIcon}>
-          <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <Circle cx="10" cy="10" r="2.5" stroke={activeTab === 'settings' ? palette.violet2 : palette.muted} strokeWidth="1.3"/>
-            <Path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.41 1.41M14.36 14.36l1.41 1.41M4.22 15.78l1.41-1.41M14.36 5.64l1.41-1.41" stroke={activeTab === 'settings' ? palette.violet2 : palette.muted} strokeWidth="1.3" strokeLinecap="round"/>
+          <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <Path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke={activeTab === 'people' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <Circle cx="9" cy="7" r="4" stroke={activeTab === 'people' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <Path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke={activeTab === 'people' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </Svg>
         </View>
-        <Text style={[styles.tabLabel, getStyle('settings')]}>Settings</Text>
+        <Text style={[styles.tabLabel, getStyle('people')]}>People</Text>
       </TouchableOpacity>
     </View>
   );

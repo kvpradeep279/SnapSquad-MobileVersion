@@ -7,7 +7,8 @@
     "plugins": [
       "expo-dev-client",
       "react-native-fast-tflite",
-      "expo-font"
+      "expo-font",
+      "expo-build-properties"
     ],
     "android": {
       "package": "com.yourteam.snapsquad",
@@ -15,6 +16,11 @@
         "READ_MEDIA_IMAGES",
         "CAMERA"
       ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "773725a7-1473-486e-a377-f5bfc47607cb"
+      }
     }
   }
 }

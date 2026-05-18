@@ -1,8 +1,11 @@
+# Thresholds restored to original notebook values (InsightFace quality)
+# Affine alignment is now implemented on-device, producing high-quality embeddings.
+
 HDBSCAN_CONFIG = {
     "min_cluster_size": 2,
     "min_samples": 1,
     "metric": "precomputed",
-    "cluster_selection_epsilon": 0.3,
+    "cluster_selection_epsilon": 0.30,
 }
 
 POST_VALIDATION = {

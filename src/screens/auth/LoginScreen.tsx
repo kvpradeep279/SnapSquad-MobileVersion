@@ -1,11 +1,12 @@
-import React from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Svg, { Path } from 'react-native-svg';
 
 import AnimatedBackground from '../../components/AnimatedBackground';
 import GradientButton from '../../components/GradientButton';
+import { useAuth } from '../../context/AuthContext';
 import { palette, getFont } from '../../theme';
 import { RootStackParamList } from '../../types';
 
@@ -13,6 +14,20 @@ type NavProp = NativeStackNavigationProp<RootStackParamList, 'Auth'>;
 
 export default function LoginScreen() {
   const navigation = useNavigation<NavProp>();
+  const { signIn, error } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSignIn = async () => {
+    if (!email || !password) {
+      Alert.alert('Error', 'Please fill all fields');
+      return;
+    }
+    setLoading(true);
+    await signIn(email, password);
+    setLoading(false);
+  };
 
   return (
     <AnimatedBackground
@@ -27,12 +42,20 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.form}>
+            {error && (
+              <View style={styles.errorBox}>
+                <Text style={styles.errorText}>{error}</Text>
+              </View>
+            )}
+
             <TextInput 
               style={styles.input} 
               placeholder="pradeep@example.com" 
               placeholderTextColor={palette.silver2} 
               keyboardType="email-address" 
               autoCapitalize="none"
+              value={email}
+              onChangeText={setEmail}
             />
             
             <TextInput 
@@ -40,6 +63,8 @@ export default function LoginScreen() {
               placeholder="••••••••••" 
               placeholderTextColor={palette.muted} 
               secureTextEntry
+              value={password}
+              onChangeText={setPassword}
              />
 
             <TouchableOpacity style={styles.forgotBtn}>
@@ -47,8 +72,8 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <GradientButton 
-              title="Sign in" 
-              onPress={() => navigation.replace('Home' as any)} 
+              title={loading ? "Signing in..." : "Sign in"} 
+              onPress={handleSignIn} 
               style={{ marginBottom: 10 }} 
             />
 
@@ -96,8 +121,8 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   scrollContent: { flexGrow: 1, padding: 20, paddingTop: 60, justifyContent: 'space-between' },
   header: { marginBottom: 24, marginTop: 40 },
-  subtitle: { fontFamily: getFont('DMSans', '400'), fontSize: 11, color: palette.muted, marginBottom: 4 },
-  title: { fontFamily: getFont('Syne', '800'), fontSize: 26, color: palette.silver2, lineHeight: 32 },
+  subtitle: { fontFamily: getFont('DMSans', '500'), fontSize: 11, color: palette.muted, marginBottom: 4, letterSpacing: 0.5, textTransform: 'uppercase' },
+  title: { fontFamily: getFont('Syne', '700'), fontSize: 24, color: palette.silver2, lineHeight: 30, letterSpacing: -0.5 },
   
   form: { flex: 1 },
   input: {
@@ -135,5 +160,7 @@ const styles = StyleSheet.create({
   ghostText: { color: palette.silver, fontFamily: getFont('DMSans', '500'), fontSize: 13 },
   
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
-  footerText: { fontSize: 12, color: palette.muted, fontFamily: getFont('DMSans', '400') }
+  footerText: { fontSize: 12, color: palette.muted, fontFamily: getFont('DMSans', '400') },
+  errorBox: { backgroundColor: 'rgba(255,80,80,0.12)', borderWidth: 1, borderColor: 'rgba(255,80,80,0.25)', borderRadius: 12, padding: 10, marginBottom: 10 },
+  errorText: { color: 'rgba(255,112,112,0.9)', fontSize: 12, fontFamily: getFont('DMSans', '400'), textAlign: 'center' }
 });

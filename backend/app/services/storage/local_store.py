@@ -42,6 +42,10 @@ class LocalStore:
         out.write_bytes(blob)
         return str(out)
 
+    def get_encrypted_blob_path(self, album_id: str, photo_id: str) -> str:
+        """Get the absolute path to an encrypted photo blob."""
+        return str(self.album_dir(album_id) / f"{photo_id}.enc")
+
     def read_encrypted_blob(self, path: str) -> bytes:
         """Read an encrypted photo blob from disk."""
         return Path(path).read_bytes()

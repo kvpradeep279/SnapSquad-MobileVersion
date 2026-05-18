@@ -85,3 +85,16 @@ venv/
 # ── AI Agents / Design ───────────────────────────────
 frontend_Ideations/
 .gemini/
+
+# ── Project Cleanup & Documentation ──────────────────
+# Ignore sensitive credential storage
+/Cloud.txt
+/[Cc]loud.txt
+
+# Ignore documentation & design files as requested
+/[Dd]ocumentation/
+/files/
+
+# Ignore backend local run-time data & logs
+/backend/backend_data/
+/backend/server_log.txt

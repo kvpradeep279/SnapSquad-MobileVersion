@@ -15,6 +15,7 @@ from app.models.face_detection import FaceDetection
 from app.models.cluster import Cluster
 from app.models.job import PipelineJob
 from app.models.edit import ClusterEdit
+from app.models.global_identity import GlobalIdentity
 
 # ── V2 Stub Models (tables created, endpoints not wired yet) ─────
 from app.models.room import Room
@@ -29,6 +30,7 @@ __all__ = [
     "Cluster",
     "PipelineJob",
     "ClusterEdit",
+    "GlobalIdentity",
     # V2 stubs
     "Room",
     "RoomMember",

@@ -1,3 +1,7 @@
+// Polyfill TextDecoder for latin1 support (Hermes only supports utf-8)
+// Must be first import — fast-png needs this at module load time
+import './src/polyfills/textDecoder';
+
 import { registerRootComponent } from 'expo';
 
 import App from './App';

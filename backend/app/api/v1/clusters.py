@@ -84,16 +84,37 @@ def get_clusters(
         .count()
     )
 
-    return ClustersResponse(
-        album_id=album_id,
-        clusters=[
+    # For each cluster, find one representative face
+    cluster_dtos = []
+    for c in clusters:
+        rep_face = db.query(FaceDetection).filter(
+            FaceDetection.album_id == album_id,
+            FaceDetection.cluster_label == c.cluster_label
+        ).first()
+        
+        rep_face_dict = None
+        if rep_face and rep_face.bbox:
+            try:
+                bbox_list = [float(x) for x in rep_face.bbox.split(",")]
+                rep_face_dict = {
+                    "photo_id": rep_face.photo_id,
+                    "bbox": bbox_list
+                }
+            except Exception:
+                pass
+                
+        cluster_dtos.append(
             ClusterDTO(
                 cluster_label=c.cluster_label,
                 display_name=c.display_name,
                 face_count=c.face_count,
+                representative_face=rep_face_dict,
             )
-            for c in clusters
-        ],
+        )
+
+    return ClustersResponse(
+        album_id=album_id,
+        clusters=cluster_dtos,
         unidentified_count=unid_count,
     )
 
@@ -216,6 +237,35 @@ def rename_cluster(
 
     row.display_name = req.new_name
 
+    # --- Save to GlobalIdentity (Auto-Tagging Memory) ---
+    from app.models.global_identity import GlobalIdentity
+    from app.models.face_detection import FaceDetection
+    import numpy as np
+    import json
+
+    face_dets = db.query(FaceDetection).filter(
+        FaceDetection.album_id == album_id,
+        FaceDetection.cluster_label == cluster_label,
+        FaceDetection.embedding_json != ""
+    ).all()
+
+    if face_dets:
+        embeddings = [json.loads(fd.embedding_json) for fd in face_dets]
+        if embeddings:
+            centroid = np.mean(embeddings, axis=0)
+            centroid = centroid / (np.linalg.norm(centroid) + 1e-10)
+            centroid_json = json.dumps(centroid.tolist())
+
+            global_id = db.query(GlobalIdentity).filter(
+                GlobalIdentity.user_id == user_id,
+                GlobalIdentity.name == req.new_name
+            ).first()
+            if not global_id:
+                global_id = GlobalIdentity(user_id=user_id, name=req.new_name, embedding_json=centroid_json)
+                db.add(global_id)
+            else:
+                global_id.embedding_json = centroid_json
+
     # Audit trail
     db.add(ClusterEdit(
         album_id=album_id,
@@ -320,9 +370,14 @@ def _recompute_cluster_table(db: Session, album_id: str) -> None:
     This is called after merge/eject edits to keep the Cluster table
     consistent with the actual face_detection cluster_label values.
     """
+    # 1. Fetch existing names before deleting
+    existing_clusters = db.query(Cluster).filter(Cluster.album_id == album_id).all()
+    name_map = {c.cluster_label: c.display_name for c in existing_clusters}
+
+    # 2. Delete existing clusters
     db.query(Cluster).filter(Cluster.album_id == album_id).delete()
 
-    # Count faces per cluster (excluding -1 = unidentified)
+    # 3. Count faces per cluster (excluding -1 = unidentified)
     face_dets = (
         db.query(FaceDetection)
         .filter(FaceDetection.album_id == album_id, FaceDetection.cluster_label != -1)
@@ -333,13 +388,17 @@ def _recompute_cluster_table(db: Session, album_id: str) -> None:
     for fd in face_dets:
         counts[fd.cluster_label] = counts.get(fd.cluster_label, 0) + 1
 
+    # 4. Rebuild clusters, restoring custom names where available
     for label, count in sorted(counts.items()):
         if count < 1:
             continue
+            
+        display_name = name_map.get(label, f"Person {label}")
+        
         db.add(Cluster(
             album_id=album_id,
             cluster_label=label,
-            display_name=f"Person {label}",
+            display_name=display_name,
             face_count=count,
         ))
 

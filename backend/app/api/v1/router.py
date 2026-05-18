@@ -13,7 +13,7 @@ V2 additions (future):
 
 from fastapi import APIRouter
 
-from app.api.v1 import albums, auth, clusters, health
+from app.api.v1 import albums, auth, clusters, health, people
 
 api_router = APIRouter()
 
@@ -22,6 +22,9 @@ api_router.include_router(health.router, tags=["health"])
 
 # Authentication
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
+
+# People
+api_router.include_router(people.router, prefix="/people", tags=["people"])
 
 # Albums — upload, process, status
 api_router.include_router(albums.router, prefix="/albums", tags=["albums"])
