@@ -30,7 +30,7 @@
 import { loadTensorflowModel, TensorflowModel } from 'react-native-fast-tflite';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
-import { decode as decodePNG } from 'fast-png';
+import { imageToTensor, getRawPixels } from '../../modules/expo-image-tensor';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -316,8 +316,6 @@ async function alignedFaceToTensor(
       const faceW = Math.max(1, bx2 - bx1);
       const faceH = Math.max(1, by2 - by1);
 
-      // Expand the crop region generously around the face so the
-      // affine warp has enough context (especially for ear/chin regions)
       const expandFactor = 0.8;
       const cropX = Math.max(0, Math.round(bx1 - faceW * expandFactor));
       const cropY = Math.max(0, Math.round(by1 - faceH * expandFactor));
@@ -326,37 +324,20 @@ async function alignedFaceToTensor(
       const cropW = Math.max(1, cropX2 - cropX);
       const cropH = Math.max(1, cropY2 - cropY);
 
-      // Step 1: Crop just the face region and convert to PNG.
-      // manipulateAsync handles JPEG/HEIC correctly; SaveFormat.PNG gives
-      // us a file that fast-png can decode.
-      const cropped = await manipulateAsync(
-        photoUri,
-        [{ crop: { originX: cropX, originY: cropY, width: cropW, height: cropH } }],
-        { format: SaveFormat.PNG }
-      );
+      // ✅ NATIVE: Decode the crop directly — no PNG, no base64, no JS loops
+      const rawBuf = await getRawPixels(photoUri, cropX, cropY, cropW, cropH);
 
-      // Step 2: Decode the PNG crop to raw pixels
-      const base64 = await FileSystem.readAsStringAsync(cropped.uri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      const binary = atob(base64);
-      const bytes = new Uint8Array(binary.length);
-      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      // First 8 bytes are [width: Int32LE, height: Int32LE]
+      const header = new DataView(rawBuf.buffer, rawBuf.byteOffset, 8);
+      const srcW = header.getInt32(0, true);
+      const srcH = header.getInt32(4, true);
+      const srcPixels = new Uint8Array(rawBuf.buffer, rawBuf.byteOffset + 8);
+      const srcChannels = 4; // always RGBA from native
 
-      const png = decodePNG(bytes);
-      const srcPixels = png.data as Uint8Array;
-      const srcW = png.width, srcH = png.height, srcCh = png.channels;
+      // Adjust kps to crop-relative coordinates
+      const srcKps: [number, number][] = kps.map(([x, y]) => [x - cropX, y - cropY]);
 
-      // Step 3: Adjust keypoints to crop-relative coordinates.
-      // kps are in original image pixel space; subtract the crop origin.
-      const srcKps: [number, number][] = kps.map(([x, y]) => [
-        x - cropX,
-        y - cropY,
-      ]);
-
-      // Validate kps are within the crop bounds (some might be outside if
-      // the face is near the image edge)
-      const margin = -30; // allow 30px outside crop
+      const margin = -30;
       const kpsInBounds = srcKps.every(
         ([x, y]) => x > margin && x < srcW - margin && y > margin && y < srcH - margin
       );
@@ -365,13 +346,9 @@ async function alignedFaceToTensor(
         throw new Error('kps out of bounds');
       }
 
-      // Step 4: Compute similarity transform: srcKps → ArcFace 112×112 template
       const M = computeSimilarityTransform(srcKps, ARCFACE_TEMPLATE_112);
+      const alignedRGB = warpAffine(srcPixels, srcW, srcH, srcChannels, M, outSize, outSize);
 
-      // Step 5: Apply affine warp to get aligned 112×112 RGB crop
-      const alignedRGB = warpAffine(srcPixels, srcW, srcH, srcCh, M, outSize, outSize);
-
-      // Step 6: Convert RGB → NHWC BGR Float32 normalized to [-1, 1]
       const tensor = new Float32Array(outSize * outSize * 3);
       for (let i = 0; i < outSize * outSize; i++) {
         const r = alignedRGB[i * 3 + 0];
@@ -382,7 +359,7 @@ async function alignedFaceToTensor(
         tensor[i * 3 + 2] = r / 127.5 - 1.0;  // R
       }
 
-      console.log('[MBF] ✅ Affine alignment succeeded (crop:', cropW, '×', cropH, ')');
+      console.log('[MBF] ✅ Affine alignment succeeded (crop:', srcW, '×', srcH, ')');
       return tensor;
 
     } catch (err) {
@@ -404,23 +381,7 @@ async function alignedFaceToTensor(
   const safeW = Math.min(Math.round(imgWidth) - originX, cropW + padX * 2);
   const safeH = Math.min(Math.round(imgHeight) - originY, cropH + padY * 2);
 
-  const cropped = await manipulateAsync(
-    photoUri,
-    [
-      {
-        crop: {
-          originX,
-          originY,
-          width:  Math.max(1, safeW),
-          height: Math.max(1, safeH),
-        },
-      },
-      { resize: { width: outSize, height: outSize } },
-    ],
-    { format: SaveFormat.PNG }
-  );
-
-  return faceImageToTensor(cropped.uri);
+  return faceImageToTensor(photoUri, originX, originY, Math.max(1, safeW), Math.max(1, safeH));
 }
 
 
@@ -431,33 +392,30 @@ async function alignedFaceToTensor(
  * Format: [H, W, 3] NHWC — BGR channel order — values normalized to [-1, 1].
  * Used as fallback when affine alignment is not possible.
  */
-async function faceImageToTensor(imageUri: string): Promise<Float32Array> {
+async function faceImageToTensor(
+  imageUri: string,
+  cropX: number,
+  cropY: number,
+  cropW: number,
+  cropH: number,
+): Promise<Float32Array> {
   const h = MBF_INPUT_SIZE;
   const w = MBF_INPUT_SIZE;
-
-  const base64 = await FileSystem.readAsStringAsync(imageUri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-
-  const png = decodePNG(bytes);
-  const pixelData = png.data as Uint8Array;
-  const channels = png.channels; // 3=RGB, 4=RGBA
-
-  const tensor = new Float32Array(h * w * 3);
-  for (let i = 0; i < h * w; i++) {
-    const r = pixelData[i * channels + 0];
-    const g = pixelData[i * channels + 1];
-    const b = pixelData[i * channels + 2];
-    tensor[i * 3 + 0] = b / 127.5 - 1.0;  // B
-    tensor[i * 3 + 1] = g / 127.5 - 1.0;  // G
-    tensor[i * 3 + 2] = r / 127.5 - 1.0;  // R
-  }
-
-  return tensor;
+  // Use imageToTensor on a pre-cropped URI isn't straightforward.
+  // Instead crop natively and resize using imageToTensor on the cropped region.
+  // We pass the full URI + crop region to getRawPixels then manually resize in JS.
+  // For the fallback path, quality matters less than correctness, so use imageToTensor
+  // after a manipulateAsync resize (fallback path is rare).
+  const cropped = await manipulateAsync(
+    imageUri,
+    [
+      { crop: { originX: cropX, originY: cropY, width: cropW, height: cropH } },
+      { resize: { width: w, height: h } },
+    ],
+    { format: SaveFormat.PNG }
+  );
+  const uint8 = await imageToTensor(cropped.uri, w, h);
+  return new Float32Array(uint8.buffer, uint8.byteOffset, uint8.byteLength / 4);
 }
 
 // ── Utilities ─────────────────────────────────────────────────────────────────

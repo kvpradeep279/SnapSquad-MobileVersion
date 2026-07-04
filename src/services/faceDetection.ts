@@ -30,11 +30,12 @@ import { loadTensorflowModel, TensorflowModel } from 'react-native-fast-tflite';
 import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import * as FileSystem from 'expo-file-system/legacy';
 import { decode as decodePNG } from 'fast-png';
+import { imageToTensor } from '../../modules/expo-image-tensor';
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
 const MODEL_INPUT_SIZE = 640;         // SCRFD expects 640×640 input
-const DETECTION_THRESHOLD = 0.70;     // Raised from 0.50 — eliminates ghost detections
+const DETECTION_THRESHOLD = 0.40;     // Balanced threshold: captures real faces while avoiding background noise
 const NMS_THRESHOLD = 0.4;            // Non-max suppression IoU threshold
 const MAX_FACES = 50;                 // Max faces per photo — supports large group photos
 const MIN_FACE_SIZE_PX = 20;          // Min face width OR height in original image pixels
@@ -159,52 +160,15 @@ async function getImageDimensions(photoUri: string): Promise<{ width: number; he
 async function imageToSCRFDTensor(photoUri: string): Promise<Float32Array> {
   const h = MODEL_INPUT_SIZE;
   const w = MODEL_INPUT_SIZE;
-
-  // Step 1: Resize to model input size
-  const resized = await manipulateAsync(
-    photoUri,
-    [{ resize: { width: w, height: h } }],
-    { format: SaveFormat.PNG }  // PNG for lossless pixel data
-  );
-
-  // Step 2: Read as base64 from filesystem
-  const base64 = await FileSystem.readAsStringAsync(resized.uri, {
-    encoding: FileSystem.EncodingType.Base64,
-  });
-
-  // Step 3: Decode base64 → binary bytes
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-
-  // Step 4: Properly decode PNG → raw RGBA pixel buffer
-  const png = decodePNG(bytes);
-  const pixelData = png.data as Uint8Array; // [R, G, B, (A), R, G, B, (A), ...]
-  const channels = png.channels; // 3 for RGB, 4 for RGBA
-
-  console.log('[SCRFD] PNG decoded:', png.width, '×', png.height,
-    'channels:', channels, 'data length:', pixelData.length);
-
-  // Step 5: Convert to NHWC BGR float tensor, normalized to [-1, 1]
-  // NHWC = each pixel's channels are interleaved: [B, G, R, B, G, R, ...]
-  // BGR order because InsightFace/OpenCV convention is preserved by onnx2tf
-  // CRITICAL: Use actual channel count (3 or 4) as stride, NOT hardcoded 4!
-  const tensor = new Float32Array(h * w * 3);
-
-  for (let i = 0; i < h * w; i++) {
-    const r = pixelData[i * channels + 0];
-    const g = pixelData[i * channels + 1];
-    const b = pixelData[i * channels + 2];
-
-    // NHWC interleaved layout, BGR channel order, [-1, 1] normalization
-    tensor[i * 3 + 0] = b / 127.5 - 1.0;  // B channel
-    tensor[i * 3 + 1] = g / 127.5 - 1.0;  // G channel
-    tensor[i * 3 + 2] = r / 127.5 - 1.0;  // R channel
-  }
-
-  return tensor;
+  
+  // Call the extremely fast C++/Kotlin/Swift Expo Native Module
+  // that reads the image, resizes it, and constructs the [-1,1] BGR tensor directly
+  // skipping Base64, JS PNG parsing, and massive for-loops.
+  const uint8 = await imageToTensor(photoUri, w, h);
+  
+  // The native bridge returns a Uint8Array representing the raw bytes of the Float tensor.
+  // We cast the underlying memory buffer to a Float32Array for zero-copy high-speed transfer!
+  return new Float32Array(uint8.buffer, uint8.byteOffset, uint8.byteLength / 4);
 }
 
 // ── SCRFD Output Parsing ─────────────────────────────────────────────────────

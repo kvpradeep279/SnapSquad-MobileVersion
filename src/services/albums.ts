@@ -22,6 +22,20 @@ export async function listAlbums(): Promise<Album[]> {
   return res.data;
 }
 
+export interface AlbumPhoto {
+  photo_id: string;
+  encrypted_blob_url: string;
+  original_filename?: string;
+}
+
+/**
+ * List all photos in an album.
+ */
+export async function getAlbumPhotos(albumId: string): Promise<AlbumPhoto[]> {
+  const res = await api.get(`/albums/${albumId}/photos`);
+  return res.data.photos;
+}
+
 /**
  * Rename an album.
  */
