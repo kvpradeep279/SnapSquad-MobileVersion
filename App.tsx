@@ -9,26 +9,22 @@ import AppNavigator from './src/navigation/AppNavigator';
 // Load Mockup Fonts
 import { useFonts } from 'expo-font';
 import { 
-  Syne_400Regular, 
-  Syne_600SemiBold, 
-  Syne_700Bold, 
-  Syne_800ExtraBold 
-} from '@expo-google-fonts/syne';
-import { 
-  DMSans_400Regular, 
-  DMSans_500Medium,
-  DMSans_700Bold
-} from '@expo-google-fonts/dm-sans';
+  Inter_300Light,
+  Inter_400Regular, 
+  Inter_500Medium,
+  Inter_600SemiBold, 
+  Inter_700Bold, 
+  Inter_800ExtraBold 
+} from '@expo-google-fonts/inter';
 
 export default function App() {
   const [fontsLoaded] = useFonts({
-    Syne_400Regular,
-    Syne_600SemiBold,
-    Syne_700Bold,
-    Syne_800ExtraBold,
-    DMSans_400Regular,
-    DMSans_500Medium,
-    DMSans_700Bold,
+    Inter_300Light,
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
   });
 
   if (!fontsLoaded) {

@@ -8,7 +8,14 @@
       "expo-dev-client",
       "react-native-fast-tflite",
       "expo-font",
-      "expo-build-properties"
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ],
     "android": {
       "package": "com.yourteam.snapsquad",

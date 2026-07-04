@@ -148,3 +148,23 @@ def delete_all_user_data(
     db.commit()
     return {"success": True, "message": "All data deleted"}
 
+
+from pydantic import BaseModel
+class PushTokenRequest(BaseModel):
+    push_token: str
+
+@router.put("/push-token")
+def update_push_token(
+    payload: PushTokenRequest,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """Save the Expo Push Token for the current user."""
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    user.push_token = payload.push_token
+    db.commit()
+    return {"success": True, "message": "Push token updated"}
+

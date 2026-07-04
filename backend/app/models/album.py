@@ -8,6 +8,7 @@ V2: Albums may belong to a Room instead of a single user.
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
@@ -34,8 +35,11 @@ class Album(Base):
     # Path to the clustering output JSON (stored by LocalStore)
     output_json: Mapped[str] = mapped_column(String(500), default="")
 
-    # V2 future: link to room_id when albums belong to group rooms
-    # room_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("rooms.id"), nullable=True)
+    # V2: Albums can belong to a Room (shadow album pattern).
+    # When set, this album is the hidden storage layer for that room.
+    room_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("rooms.id"), nullable=True, default=None, index=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
