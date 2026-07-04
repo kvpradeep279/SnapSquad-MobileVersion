@@ -32,6 +32,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // On mount: check token + fetch profile
   useEffect(() => {
+    import('../services/api').then(({ setOnUnauthorized }) => {
+      setOnUnauthorized(() => {
+        setIsLoggedIn(false);
+        setUser(null);
+      });
+    });
+
     (async () => {
       const token = await auth.getStoredToken();
       if (token) {

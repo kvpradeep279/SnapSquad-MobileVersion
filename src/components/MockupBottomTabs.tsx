@@ -1,29 +1,31 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Svg, { Path, Rect, Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { palette, getFont } from '../theme';
 import { RootStackParamList } from '../types';
 
 interface TabProps {
-  activeTab: 'home' | 'clusters' | 'upload' | 'export' | 'people';
+  activeTab: 'home' | 'albums' | 'upload' | 'rooms' | 'people';
 }
 
 export default function MockupBottomTabs({ activeTab }: TabProps) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const insets = useSafeAreaInsets();
 
   const getStyle = (tab: string) => ({
     color: activeTab === tab ? palette.violet2 : palette.muted
   });
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 20) }]}>
       {/* HOME */}
       <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Home' as any)}>
-        <View style={styles.tabIcon}>
+        <View style={[styles.tabIcon, activeTab === 'home' && styles.activeTabIcon]}>
           <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <Path d="M3 10L10 3l7 7v7H13v-4H7v4H3z" stroke={activeTab === 'home' ? palette.violet2 : palette.muted} strokeWidth="1.4" strokeLinejoin="round"/>
           </Svg>
@@ -31,52 +33,62 @@ export default function MockupBottomTabs({ activeTab }: TabProps) {
         <Text style={[styles.tabLabel, getStyle('home')]}>Home</Text>
       </TouchableOpacity>
 
-      {/* CLUSTERS */}
+      {/* ALBUMS */}
       <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Clusters' as any)}>
-        <View style={styles.tabIcon}>
+        <View style={[styles.tabIcon, activeTab === 'albums' && styles.activeTabIcon]}>
           <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <Rect x="2" y="2" width="7" height="7" rx="2" stroke={activeTab === 'clusters' ? palette.violet2 : palette.muted} strokeWidth="1.3"/>
-            <Rect x="11" y="2" width="7" height="7" rx="2" stroke={activeTab === 'clusters' ? palette.violet2 : palette.muted} strokeWidth="1.3"/>
-            <Rect x="2" y="11" width="7" height="7" rx="2" stroke={activeTab === 'clusters' ? palette.violet2 : palette.muted} strokeWidth="1.3"/>
-            <Rect x="11" y="11" width="7" height="7" rx="2" stroke={activeTab === 'clusters' ? palette.violet2 : palette.muted} strokeWidth="1.3"/>
+            <Rect x="2" y="2" width="7" height="7" rx="2" stroke={activeTab === 'albums' ? palette.violet2 : palette.muted} strokeWidth="1.3"/>
+            <Rect x="11" y="2" width="7" height="7" rx="2" stroke={activeTab === 'albums' ? palette.violet2 : palette.muted} strokeWidth="1.3"/>
+            <Rect x="2" y="11" width="7" height="7" rx="2" stroke={activeTab === 'albums' ? palette.violet2 : palette.muted} strokeWidth="1.3"/>
+            <Rect x="11" y="11" width="7" height="7" rx="2" stroke={activeTab === 'albums' ? palette.violet2 : palette.muted} strokeWidth="1.3"/>
           </Svg>
         </View>
-        <Text style={[styles.tabLabel, getStyle('clusters')]}>Clusters</Text>
+        <Text style={[styles.tabLabel, getStyle('albums')]}>Albums</Text>
       </TouchableOpacity>
 
-
-      {/* UPLOAD (Center Button) */}
-      <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Upload' as any)}>
-        <LinearGradient
-          colors={palette.gradient.hero}
-          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-          style={styles.uploadIconWrap}
-        >
-          <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <Path d="M8 2v8M4 6l4-4 4 4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
-            <Path d="M2 12h12" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
-          </Svg>
-        </LinearGradient>
+      {/* UPLOAD */}
+      <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('UploadHub' as any)}>
+        {activeTab === 'upload' ? (
+          <LinearGradient
+            colors={palette.gradient.hero}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={styles.uploadIconWrap}
+          >
+            <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <Path d="M8 2v8M4 6l4-4 4 4" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <Path d="M2 12h12" stroke="white" strokeWidth="1.8" strokeLinecap="round"/>
+            </Svg>
+          </LinearGradient>
+        ) : (
+          <View style={[styles.uploadIconWrap, { backgroundColor: palette.glass, borderWidth: 1, borderColor: palette.border }]}>
+            <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <Path d="M8 2v8M4 6l4-4 4 4" stroke={palette.muted} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              <Path d="M2 12h12" stroke={palette.muted} strokeWidth="1.8" strokeLinecap="round"/>
+            </Svg>
+          </View>
+        )}
         <Text style={[styles.tabLabel, getStyle('upload')]}>Upload</Text>
       </TouchableOpacity>
 
-      {/* EXPORT */}
-      <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Export' as any)}>
-        <View style={styles.tabIcon}>
-          <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <Path d="M14 8l3 3-3 3M6 8l-3 3 3 3M11 4l-2 12" stroke={activeTab === 'export' ? palette.violet2 : palette.muted} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+      {/* ROOMS */}
+      <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('Rooms' as any)}>
+        <View style={[styles.tabIcon, activeTab === 'rooms' && styles.activeTabIcon]}>
+          <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <Path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke={activeTab === 'rooms' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <Circle cx="9" cy="7" r="4" stroke={activeTab === 'rooms' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <Path d="M23 21v-2a4 4 0 00-3-3.87" stroke={activeTab === 'rooms' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <Path d="M16 3.13a4 4 0 010 7.75" stroke={activeTab === 'rooms' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </Svg>
         </View>
-        <Text style={[styles.tabLabel, getStyle('export')]}>Export</Text>
+        <Text style={[styles.tabLabel, getStyle('rooms')]}>Rooms</Text>
       </TouchableOpacity>
 
       {/* PEOPLE */}
       <TouchableOpacity style={styles.tabItem} onPress={() => navigation.navigate('People' as any)}>
-        <View style={styles.tabIcon}>
+        <View style={[styles.tabIcon, activeTab === 'people' && styles.activeTabIcon]}>
           <Svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-            <Path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" stroke={activeTab === 'people' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <Circle cx="9" cy="7" r="4" stroke={activeTab === 'people' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-            <Path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" stroke={activeTab === 'people' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <Path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2" stroke={activeTab === 'people' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <Circle cx="12" cy="7" r="4" stroke={activeTab === 'people' ? palette.violet2 : palette.muted} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </Svg>
         </View>
         <Text style={[styles.tabLabel, getStyle('people')]}>People</Text>
@@ -92,7 +104,6 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: palette.border,
     paddingTop: 10,
-    paddingBottom: 20,
   },
   tabItem: {
     flex: 1,
@@ -100,19 +111,22 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   tabIcon: {
-    width: 22, height: 22,
+    width: 32, height: 32,
     alignItems: 'center',
     justifyContent: 'center',
+    borderRadius: 16,
+  },
+  activeTabIcon: {
+    backgroundColor: 'rgba(123,92,245,0.15)',
   },
   tabLabel: {
     fontFamily: getFont('DMSans', '400'),
     fontSize: 10,
   },
   uploadIconWrap: {
-    width: 36, height: 36,
+    width: 32, height: 32,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: -8,
   }
 });

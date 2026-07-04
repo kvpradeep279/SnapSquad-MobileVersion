@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Feather } from '@expo/vector-icons';
 
 import AnimatedBackground from '../../components/AnimatedBackground';
 import GradientButton from '../../components/GradientButton';
@@ -19,14 +20,32 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [valError, setValError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const handleSignUp = async () => {
+    setValError('');
     if (!name || !email || !password || !confirmPassword) {
-      Alert.alert('Error', 'Please fill all fields');
+      setValError('Please fill all fields');
       return;
     }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      setValError('Please enter a valid email address');
+      return;
+    }
+    
+    // Password validation
+    if (password.length < 6) {
+      setValError('Password must be at least 6 characters long');
+      return;
+    }
+    
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      setValError('Passwords do not match');
       return;
     }
     setLoading(true);
@@ -48,44 +67,55 @@ export default function SignUpScreen() {
           </View>
 
           <View style={styles.form}>
-            {error && (
+            {(error || valError) ? (
               <View style={styles.errorBox}>
-                <Text style={styles.errorText}>{error}</Text>
+                <Text style={styles.errorText}>{error || valError}</Text>
               </View>
-            )}
+            ) : null}
 
             <TextInput 
-              style={styles.input} 
+              style={[styles.input, { color: palette.white }]} 
               placeholder="Full name" 
-              placeholderTextColor={palette.silver2} 
+              placeholderTextColor="rgba(255, 255, 255, 0.4)" 
               value={name}
               onChangeText={setName}
             />
             <TextInput 
-              style={styles.input} 
+              style={[styles.input, { color: palette.white }]} 
               placeholder="Email address" 
-              placeholderTextColor={palette.silver2} 
+              placeholderTextColor="rgba(255, 255, 255, 0.4)" 
               keyboardType="email-address" 
               autoCapitalize="none" 
               value={email}
               onChangeText={setEmail}
             />
-            <TextInput 
-              style={[styles.input, { color: palette.silver2 }]} 
-              placeholder="Password" 
-              placeholderTextColor={palette.muted} 
-              secureTextEntry 
-              value={password}
-              onChangeText={setPassword}
-            />
-            <TextInput 
-              style={[styles.input, { color: palette.silver2 }]} 
-              placeholder="Confirm password" 
-              placeholderTextColor={palette.muted} 
-              secureTextEntry 
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-            />
+            <View style={styles.passwordContainer}>
+              <TextInput 
+                style={styles.passwordInput} 
+                placeholder="Password" 
+                placeholderTextColor="rgba(255, 255, 255, 0.4)" 
+                secureTextEntry={!showPassword} 
+                value={password}
+                onChangeText={setPassword}
+              />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeIcon}>
+                <Feather name={showPassword ? "eye" : "eye-off"} size={18} color={palette.muted} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.passwordContainer}>
+              <TextInput 
+                style={styles.passwordInput} 
+                placeholder="Confirm password" 
+                placeholderTextColor="rgba(255, 255, 255, 0.4)" 
+                secureTextEntry={!showConfirmPassword} 
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+              />
+              <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)} style={styles.eyeIcon}>
+                <Feather name={showConfirmPassword ? "eye" : "eye-off"} size={18} color={palette.muted} />
+              </TouchableOpacity>
+            </View>
 
             <GradientButton 
               title={loading ? "Creating account..." : "Create account"} 
@@ -99,19 +129,18 @@ export default function SignUpScreen() {
               <View style={styles.divider} />
             </View>
 
-            <TouchableOpacity style={styles.ghostBtn}>
+            <TouchableOpacity style={styles.ghostBtn} onPress={() => Alert.alert('Coming Soon', 'Google sign-in will be available in V2.')}>
               <Text style={styles.ghostText}>Continue with Google</Text>
             </TouchableOpacity>
 
-          </View>
+            <View style={styles.footer}>
+              <Text style={styles.footerText}>Already have an account? </Text>
+              <TouchableOpacity onPress={() => navigation.navigate('Auth' as any)}>
+                <Text style={[styles.footerText, { color: palette.violet2 }]}>Sign in</Text>
+              </TouchableOpacity>
+            </View>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Auth' as any)}>
-              <Text style={[styles.footerText, { color: palette.violet2 }]}>Sign in</Text>
-            </TouchableOpacity>
           </View>
-
         </ScrollView>
       </KeyboardAvoidingView>
     </AnimatedBackground>
@@ -138,6 +167,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginBottom: 10,
   },
+  passwordContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: palette.glass,
+    borderWidth: 1,
+    borderColor: palette.border,
+    borderRadius: 14,
+    marginBottom: 10,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingVertical: 13,
+    paddingHorizontal: 16,
+    color: palette.white,
+    fontFamily: getFont('DMSans', '400'),
+    fontSize: 14,
+  },
+  eyeIcon: {
+    padding: 13,
+  },
   
   dividerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginVertical: 10 },
   divider: { flex: 1, height: 1, backgroundColor: palette.border },
@@ -154,7 +203,7 @@ const styles = StyleSheet.create({
   },
   ghostText: { color: palette.silver, fontFamily: getFont('DMSans', '500'), fontSize: 13 },
   
-  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginBottom: 20 },
+  footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', marginTop: 24 },
   footerText: { fontSize: 12, color: palette.muted, fontFamily: getFont('DMSans', '400') },
 
   errorBox: { backgroundColor: 'rgba(255,80,80,0.12)', borderWidth: 1, borderColor: 'rgba(255,80,80,0.25)', borderRadius: 12, padding: 10, marginBottom: 10 },

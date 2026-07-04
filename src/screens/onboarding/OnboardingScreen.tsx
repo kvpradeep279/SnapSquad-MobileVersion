@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated, ScrollView, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Svg, { Circle, Path, Rect, Defs, LinearGradient as SvgLinearGradient, Stop } from 'react-native-svg';
@@ -17,6 +18,7 @@ export default function OnboardingScreen() {
   const navigation = useNavigation<NavProp>();
   const [step, setStep] = useState(1);
   const fadeAnim = React.useRef(new Animated.Value(1)).current;
+  const insets = useSafeAreaInsets();
 
   const navigateTo = (nextStep: number) => {
     if (nextStep > 3) {
@@ -61,7 +63,7 @@ export default function OnboardingScreen() {
         ]
       }
     >
-      <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      <Animated.View style={[styles.container, { opacity: fadeAnim, paddingTop: Math.max(insets.top, 20) + 20, paddingBottom: Math.max(insets.bottom, 20) + 10 }]}>
         
         {step === 1 && (
           <View style={styles.contentBetween}>
@@ -86,7 +88,7 @@ export default function OnboardingScreen() {
             <View style={{ alignItems: 'center', paddingHorizontal: 16 }}>
               <Text style={styles.syneHeadline}>Every face.</Text>
               <Text style={styles.syneHeadlineGrad}>Every memory.</Text>
-              <Text style={styles.dmDesc}>Upload your group photos and let SnapSquad intelligently cluster every person — so your memories are always organized.</Text>
+              <Text style={styles.dmDesc}>Upload your group photos and let SnapSquad intelligently cluster every person so your memories are always organized.</Text>
             </View>
 
             <View style={{ width: '100%', gap: 16 }}>
@@ -188,7 +190,7 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingHorizontal: 20, paddingTop: 40, paddingBottom: 30 },
+  container: { flex: 1, paddingHorizontal: 20 },
   contentBetween: { flex: 1, justifyContent: 'space-between', alignItems: 'center' },
   contentBetweenTight: { flex: 1, justifyContent: 'space-between' },
   centerCol: { alignItems: 'center' },

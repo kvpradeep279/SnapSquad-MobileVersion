@@ -1,22 +1,28 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl, Image, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SecureStore from 'expo-secure-store';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AnimatedBackground from '../../components/AnimatedBackground';
 import GlassCard from '../../components/GlassCard';
 import MockupBottomTabs from '../../components/MockupBottomTabs';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import EmptyState from '../../components/EmptyState';
+import ConfirmModal from '../../components/ConfirmModal';
 import AuthImage from '../../components/AuthImage';
 import { useAlbums } from '../../context/AlbumContext';
+import { deleteAlbum } from '../../services/albums';
 import { useAuth } from '../../context/AuthContext';
 import { palette, getFont } from '../../theme';
 import { RootStackParamList } from '../../types';
 import api from '../../services/api';
+import { registerForPushNotificationsAsync } from '../../services/notifications';
+import ProfileSetupModal from '../../components/ProfileSetupModal';
+import { getProfileStatus } from '../../services/profile';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -39,9 +45,27 @@ const GRAD_COLORS = [
 
 export default function HomeScreen() {
   const navigation = useNavigation<NavProp>();
-  const { albums, isLoading, refreshAlbums } = useAlbums();
+  const insets = useSafeAreaInsets();
+  const { albums, isLoading, refreshAlbums, removeUploadingAlbum } = useAlbums();
   const { user } = useAuth();
   const [authToken, setAuthToken] = useState<string | null>(null);
+
+  const [confirmModal, setConfirmModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    isDestructive?: boolean;
+    onConfirm: () => void;
+    cancelText?: string;
+    confirmText?: string;
+    hideCancel?: boolean;
+  }>({
+    visible: false, title: '', message: '', onConfirm: () => {}
+  });
+
+  const [showProfileModal, setShowProfileModal] = useState(false);
+
+  const closeConfirm = () => setConfirmModal(prev => ({ ...prev, visible: false }));
 
   const avatarLetter = (user?.username?.[0] || user?.email?.[0] || 'S').toUpperCase();
   const displayName = user?.username || user?.email?.split('@')[0] || 'there';
@@ -56,10 +80,41 @@ export default function HomeScreen() {
   useEffect(() => {
     SecureStore.getItemAsync('auth_token').then(setAuthToken);
     refreshAlbums();
-  }, []);
+    registerForPushNotificationsAsync();
+    
+    // Check if user has set up their profile
+    const checkProfile = async () => {
+      try {
+        if (!user?.id) return;
+        const skipped = await SecureStore.getItemAsync(`profile_skipped_${user.id}`);
+        if (skipped === 'true') return;
+        
+        const res = await getProfileStatus();
+        if (!res.has_profile) {
+          setShowProfileModal(true);
+        }
+      } catch (e) {
+        console.error('Failed to check profile status', e);
+      }
+    };
+    if (user?.id) {
+      checkProfile();
+    }
+  }, [user?.id]);
+
+  const handleProfileComplete = async () => {
+    setShowProfileModal(false);
+  };
+
+  const handleProfileSkip = async () => {
+    setShowProfileModal(false);
+    if (user?.id) {
+      await SecureStore.setItemAsync(`profile_skipped_${user.id}`, 'true');
+    }
+  };
 
   const getPhotoUrl = (albumId: string, photoId: string) => {
-    return `${api.defaults.baseURL || 'http://192.168.1.9:8000/api/v1'}/albums/${albumId}/photos/${photoId}/raw`;
+    return `${api.defaults.baseURL}/albums/${albumId}/photos/${photoId}/raw`;
   };
 
   const renderPill = (status: string) => {
@@ -76,12 +131,12 @@ export default function HomeScreen() {
       orbs={[ { color: 'rgba(123,92,245,0.12)', size: 180, top: -20, right: -30 } ]}
     >
       <View style={styles.container}>
-        <View style={styles.content}>
+        <View style={[styles.content, { paddingTop: Math.max(insets.top + 10, 50) }]}>
           {/* Header */}
           <View style={styles.header}>
             <View>
               <Text style={styles.greetingText}>{getGreeting()}</Text>
-              <Text style={styles.nameText}>Hey, {displayName} 👋</Text>
+              <Text style={styles.nameText}>Hey, {displayName}</Text>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('Settings' as any)}>
               <LinearGradient
@@ -142,7 +197,20 @@ export default function HomeScreen() {
                   <TouchableOpacity
                     key={album.album_id}
                     onPress={() => {
-                      if (album.status === 'complete') navigation.navigate('Clusters' as any, { albumId: album.album_id });
+                      if (album.status === 'complete') {
+                        navigation.navigate('Clusters' as any, { albumId: album.album_id });
+                      } else if (album.status === 'clustering' || album.status === 'created') {
+                        navigation.navigate('Processing' as any, { albumId: album.album_id });
+                      } else {
+                        setConfirmModal({
+                          visible: true,
+                          title: 'Not Ready',
+                          message: 'This album is currently uploading or has failed.',
+                          confirmText: 'OK',
+                          hideCancel: true,
+                          onConfirm: closeConfirm
+                        });
+                      }
                     }}
                   >
                     <GlassCard style={styles.albumCard}>
@@ -174,7 +242,30 @@ export default function HomeScreen() {
                           {album.total_photos} photos{album.total_faces > 0 ? ` · ${album.total_faces} faces` : ''}
                         </Text>
                       </View>
-                      {renderPill(album.status)}
+                      {album.status === 'uploading' ? (
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                          {renderPill('uploading')}
+                          <TouchableOpacity onPress={() => {
+                            setConfirmModal({
+                              visible: true,
+                              title: 'Remove Album',
+                              message: 'Cancel upload and remove this album?',
+                              confirmText: 'Remove',
+                              isDestructive: true,
+                              onConfirm: async () => {
+                                closeConfirm();
+                                await removeUploadingAlbum(album.album_id);
+                              }
+                            });
+                          }}>
+                            <View style={[styles.pill, { backgroundColor: 'rgba(255,80,80,0.1)' }]}>
+                              <Text style={[styles.pillText, { color: '#FF7070' }]}>✕ Remove</Text>
+                            </View>
+                          </TouchableOpacity>
+                        </View>
+                      ) : (
+                        renderPill(album.status)
+                      )}
                     </GlassCard>
                   </TouchableOpacity>
                 );
@@ -185,13 +276,31 @@ export default function HomeScreen() {
 
         <MockupBottomTabs activeTab="home" />
       </View>
+
+      <ConfirmModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onCancel={closeConfirm}
+        onConfirm={confirmModal.onConfirm}
+        isDestructive={confirmModal.isDestructive}
+        cancelText={confirmModal.cancelText}
+        confirmText={confirmModal.confirmText}
+        hideCancel={confirmModal.hideCancel}
+      />
+
+      <ProfileSetupModal
+        visible={showProfileModal}
+        onComplete={handleProfileComplete}
+        onSkip={handleProfileSkip}
+      />
     </AnimatedBackground>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { flex: 1, paddingHorizontal: 20, paddingTop: 60 },
+  content: { flex: 1, paddingHorizontal: 20 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   greetingText: { fontSize: 11, color: palette.muted, fontFamily: getFont('DMSans', '400') },
   nameText: { fontFamily: getFont('Syne', '800'), fontSize: 18, color: palette.silver2 },

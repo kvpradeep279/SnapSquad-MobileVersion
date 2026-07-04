@@ -35,6 +35,7 @@ interface AlbumState {
   setCurrentAlbum: (id: string) => void;
   setProgress: (progress: UploadProgress) => void;
   clearCurrent: () => void;
+  removeUploadingAlbum: (albumId: string) => Promise<void>;
 }
 
 const AlbumContext = createContext<AlbumState>({} as AlbumState);
@@ -74,10 +75,19 @@ export function AlbumProvider({ children }: { children: React.ReactNode }) {
     setUploadProgress({ uploaded: 0, total: 0 });
   };
 
+  const removeUploadingAlbum = useCallback(async (albumId: string) => {
+    try {
+      await albumsApi.deleteAlbum(albumId);
+      setAlbums(prev => prev.filter(a => a.album_id !== albumId));
+    } catch {
+      // Ignore network errors
+    }
+  }, []);
+
   return (
     <AlbumContext.Provider value={{
       albums, isLoading, currentAlbumId, uploadProgress,
-      refreshAlbums, createAndSetAlbum, setCurrentAlbum, setProgress, clearCurrent
+      refreshAlbums, createAndSetAlbum, setCurrentAlbum, setProgress, clearCurrent, removeUploadingAlbum
     }}>
       {children}
     </AlbumContext.Provider>

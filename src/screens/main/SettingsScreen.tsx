@@ -12,6 +12,7 @@ import { useAuth } from '../../context/AuthContext';
 import { palette, getFont } from '../../theme';
 import { RootStackParamList } from '../../types';
 import api from '../../services/api';
+import ProfileSetupModal from '../../components/ProfileSetupModal';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Settings'>;
 
@@ -23,6 +24,8 @@ export default function SettingsScreen() {
   const avatarLetter = (user?.username?.[0] || user?.email?.[0] || '?').toUpperCase();
   const displayName = user?.username || user?.email?.split('@')[0] || 'User';
   const displayEmail = user?.email || '';
+
+  const [isProfileModalOpen, setIsProfileModalOpen] = React.useState(false);
 
   const handleSignOut = () => {
     Alert.alert(
@@ -99,6 +102,15 @@ export default function SettingsScreen() {
               </GlassCard>
             </TouchableOpacity>
 
+            <TouchableOpacity onPress={() => setIsProfileModalOpen(true)}>
+              <GlassCard style={styles.settingCard}>
+                <Text style={styles.settingText}>Update Auto-ID face</Text>
+                <Svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <Path d="M5 3l4 4-4 4" stroke="rgba(200,208,224,0.4)" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+                </Svg>
+              </GlassCard>
+            </TouchableOpacity>
+
             <TouchableOpacity onPress={() => Alert.alert('Notifications', 'Notification settings coming in a future update.')}>
               <GlassCard style={styles.settingCard}>
                 <Text style={styles.settingText}>Notifications</Text>
@@ -141,6 +153,15 @@ export default function SettingsScreen() {
         </View>
         <MockupBottomTabs activeTab="settings" />
       </View>
+
+      <ProfileSetupModal 
+        visible={isProfileModalOpen}
+        onComplete={() => {
+          setIsProfileModalOpen(false);
+          Alert.alert('Success', 'Your Auto-ID face has been updated!');
+        }}
+        onSkip={() => setIsProfileModalOpen(false)}
+      />
     </AnimatedBackground>
   );
 }

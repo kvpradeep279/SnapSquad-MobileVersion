@@ -5,7 +5,10 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Svg, { Path } from 'react-native-svg';
 import * as SecureStore from 'expo-secure-store';
 
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
 import AnimatedBackground from '../../components/AnimatedBackground';
+import EmptyState from '../../components/EmptyState';
 import { getPersonPhotos, PersonPhoto } from '../../services/people';
 import { palette, getFont } from '../../theme';
 import { RootStackParamList } from '../../types';
@@ -20,6 +23,7 @@ const GAP = 2;
 const PHOTO_SIZE = (width - (COLUMNS - 1) * GAP) / COLUMNS;
 
 export default function PersonDetailScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RoutePropType>();
   const { personName } = route.params;
@@ -49,7 +53,7 @@ export default function PersonDetailScreen() {
 
   return (
     <AnimatedBackground>
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, paddingTop: Math.max(insets.top + 10, 60) }}>
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -66,11 +70,21 @@ export default function PersonDetailScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-            <View style={styles.headerStats}>
-              <Text style={styles.headerSub}>
-                {photos.length} deduplicated photos found across your albums.
-              </Text>
-            </View>
+            {photos.length === 0 ? (
+              <View style={{ marginTop: 60 }}>
+                <EmptyState 
+                  icon="🔍"
+                  title="No Photos Found"
+                  description="We couldn't find any photos for this person across your albums."
+                />
+              </View>
+            ) : (
+              <>
+                <View style={styles.headerStats}>
+                  <Text style={styles.headerSub}>
+                    {photos.length} deduplicated photos found across your albums.
+                  </Text>
+                </View>
 
             <View style={styles.grid}>
               {photos.map(p => (
@@ -85,6 +99,8 @@ export default function PersonDetailScreen() {
                 </View>
               ))}
             </View>
+              </>
+            )}
           </ScrollView>
         )}
       </View>
@@ -94,7 +110,7 @@ export default function PersonDetailScreen() {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16 },
+  topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingBottom: 16 },
   backBtn: { width: 36, height: 36, backgroundColor: palette.glass2, borderWidth: 1, borderColor: palette.border, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontFamily: getFont('Syne', '800'), fontSize: 18, color: palette.silver2 },
   headerStats: { paddingHorizontal: 20, marginBottom: 16 },

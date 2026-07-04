@@ -100,7 +100,11 @@ export default function PeopleScreen() {
                   subtitle="Rename a cluster in any album to see them here!"
                 />
               ) : (
-                people.map(person => (
+                [...people].sort((a, b) => {
+                  if (a.name === 'Me') return -1;
+                  if (b.name === 'Me') return 1;
+                  return b.total_faces - a.total_faces;
+                }).map(person => (
                   <TouchableOpacity
                     key={person.name}
                     style={styles.gridCardPress}

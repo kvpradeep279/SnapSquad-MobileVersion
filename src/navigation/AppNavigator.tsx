@@ -15,13 +15,31 @@ import UploadScreen from '../screens/main/UploadScreen';
 import ProcessingScreen from '../screens/main/ProcessingScreen';
 import ClustersScreen from '../screens/main/ClustersScreen';
 import ClusterDetailScreen from '../screens/main/ClusterDetailScreen';
-import ExportScreen from '../screens/main/ExportScreen';
 import SettingsScreen from '../screens/main/SettingsScreen';
 import EditProfileScreen from '../screens/main/EditProfileScreen';
+
+// V2 Room screens
+import RoomQRScreen from '../screens/main/RoomQRScreen';
+import RoomJoinScreen from '../screens/main/RoomJoinScreen';
+import PendingRequestsScreen from '../screens/main/PendingRequestsScreen';
+import RoomsScreen from '../screens/main/RoomsScreen';
+import UploadHubScreen from '../screens/main/UploadHubScreen';
+import RoomDetailScreen from '../screens/main/RoomDetailScreen';
+import FindMeScreen from '../screens/main/FindMeScreen';
 
 import { RootStackParamList } from '../types';
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
+
+const linking = {
+  prefixes: ['snapsquad://'],
+  config: {
+    screens: {
+      // e.g. snapsquad://room/123e4567-e89b-12d3-a456-426614174000
+      RoomJoin: 'room/:roomId',
+    },
+  },
+};
 
 export default function AppNavigator() {
   const { isLoggedIn, isLoading } = useAuth();
@@ -36,7 +54,7 @@ export default function AppNavigator() {
   }
 
   return (
-    <NavigationContainer>
+    <NavigationContainer linking={linking}>
       <Stack.Navigator
         screenOptions={{
           headerShown: false,
@@ -52,11 +70,18 @@ export default function AppNavigator() {
             <Stack.Screen name="Processing" component={ProcessingScreen} />
             <Stack.Screen name="Clusters" component={ClustersScreen} />
             <Stack.Screen name="ClusterDetail" component={ClusterDetailScreen} />
-            <Stack.Screen name="Export" component={ExportScreen} />
             <Stack.Screen name="Settings" component={SettingsScreen} />
             <Stack.Screen name="EditProfile" component={EditProfileScreen} />
             <Stack.Screen name="People" component={require('../screens/main/PeopleScreen').default} />
             <Stack.Screen name="PersonDetail" component={require('../screens/main/PersonDetailScreen').default} />
+            {/* V2 Room screens */}
+            <Stack.Screen name="RoomQR" component={RoomQRScreen} />
+            <Stack.Screen name="RoomJoin" component={RoomJoinScreen} />
+            <Stack.Screen name="PendingRequests" component={PendingRequestsScreen} />
+            <Stack.Screen name="Rooms" component={RoomsScreen} />
+            <Stack.Screen name="UploadHub" component={UploadHubScreen} />
+            <Stack.Screen name="RoomDetail" component={RoomDetailScreen} />
+            <Stack.Screen name="FindMe" component={FindMeScreen} />
           </>
         ) : (
           // Not authenticated — show onboarding + auth
