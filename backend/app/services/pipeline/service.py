@@ -23,10 +23,10 @@ from pathlib import Path
 from app.core.config import settings
 from app.services.pipeline.clustering import cluster_faces_v21
 from app.services.pipeline.config import (
-    COHERENCE_SPLIT,
     HDBSCAN_CONFIG,
     MERGE_PASS1,
     MERGE_PASS2,
+    MERGE_PASS3,
     OUTLIER_CONFIG,
     POST_VALIDATION,
     RESCUE_PASS1,
@@ -50,10 +50,10 @@ def get_pipeline_config() -> dict:
         "post_validation": POST_VALIDATION,
         "merge_pass1": MERGE_PASS1,
         "merge_pass2": MERGE_PASS2,
+        "merge_pass3": MERGE_PASS3,
         "rescue_pass1": RESCUE_PASS1,
         "rescue_pass2": RESCUE_PASS2,
         "outlier": OUTLIER_CONFIG,
-        "coherence_split": COHERENCE_SPLIT,
     }
 
 

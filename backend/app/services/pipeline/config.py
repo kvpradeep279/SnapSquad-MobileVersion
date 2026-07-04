@@ -1,5 +1,4 @@
-# Thresholds restored to original notebook values (InsightFace quality)
-# Affine alignment is now implemented on-device, producing high-quality embeddings.
+# SnapSquad Pipeline Config (Notebook 15 Architecture)
 
 HDBSCAN_CONFIG = {
     "min_cluster_size": 2,
@@ -9,8 +8,8 @@ HDBSCAN_CONFIG = {
 }
 
 POST_VALIDATION = {
-    "min_avg_similarity": 0.30,
-    "min_link_similarity": 0.25,
+    "min_avg_similarity": 0.28,
+    "min_link_similarity": 0.20,
 }
 
 MERGE_PASS1 = {
@@ -22,6 +21,11 @@ MERGE_PASS2 = {
     "centroid_threshold": 0.39,
     "cross_avg_min": 0.25,
     "max_cluster_size": 3,
+}
+
+MERGE_PASS3 = {
+    "centroid_threshold": 0.30,
+    "cross_avg_min": 0.22,
 }
 
 RESCUE_PASS1 = {
@@ -37,11 +41,5 @@ RESCUE_PASS2 = {
 OUTLIER_CONFIG = {
     "relative_factor": 0.85,
     "hard_floor": 0.35,
-    "absolute_min_avg": 0.28,
-}
-
-COHERENCE_SPLIT = {
-    "min_cluster_size": 6,
-    "split_sim": 0.35,
-    "cross_threshold": 0.35,
+    "absolute_min_avg": 0.22,
 }

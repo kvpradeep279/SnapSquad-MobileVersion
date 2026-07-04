@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
+from pgvector.sqlalchemy import Vector
 
 from app.db.base import Base
 
@@ -49,11 +50,12 @@ class FaceDetection(Base):
     # Detection confidence from SCRFD (0.0–1.0)
     det_score: Mapped[float] = mapped_column(Float, default=1.0)
 
-    # Protected 512-d embedding stored as JSON text.
-    # In production with pgvector, this would be a Vector(512) column
-    # for native cosine similarity queries. For V1 MVP, we store as text
-    # and load into numpy for HDBSCAN. Easy to migrate to pgvector later.
+    # Protected embedding stored as JSON text.
     embedding_json: Mapped[str] = mapped_column(Text, default="")
+
+    # V2 (Phase 6): Fast retrieval using pgvector
+    # MobileFaceNet produces 512-d embeddings.
+    embedding_vec = mapped_column(Vector(512), nullable=True)
 
     # Cluster label assigned by HDBSCAN (-1 = unidentified/noise)
     cluster_label: Mapped[int] = mapped_column(Integer, default=-1)

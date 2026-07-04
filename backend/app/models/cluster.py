@@ -12,7 +12,7 @@ V2: Clusters may be linked to registered identity embeddings for
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -31,7 +31,13 @@ class Cluster(Base):
     display_name: Mapped[str] = mapped_column(String(255), default="")
     face_count: Mapped[int] = mapped_column(Integer, default=0)
 
-    # V2 future: matched_user_id for private room identity matching
+    # V2 Incremental Clustering: running-average centroid of all face embeddings
+    # in this cluster. Stored as a JSON array (192 floats).
+    # Updated each time a new face is assigned to this cluster.
+    # Used to compare new uploads against existing clusters without re-running HDBSCAN.
+    centroid_json: Mapped[str] = mapped_column(Text, default="")
+
+    # V2 future: matched_user_id for Event Mode identity matching
     # matched_user_id: Mapped[str | None] = mapped_column(
     #     String(36), ForeignKey("users.id"), nullable=True
     # )
