@@ -11,15 +11,15 @@ import GlassCard from '../../components/GlassCard';
 import MockupBottomTabs from '../../components/MockupBottomTabs';
 import SkeletonLoader from '../../components/SkeletonLoader';
 import EmptyState from '../../components/EmptyState';
+import ConfirmModal from '../../components/ConfirmModal';
 import FaceAvatar from '../../components/FaceAvatar';
 import AuthImage from '../../components/AuthImage';
 import { getClusters, ClustersResponse, ClusterInfo } from '../../services/clusters';
-import { deleteAlbum, renameAlbum } from '../../services/albums';
+import { deleteAlbum, renameAlbum, getAlbumPhotos, AlbumPhoto } from '../../services/albums';
 import api from '../../services/api';
 import { useAlbums } from '../../context/AlbumContext';
 import { palette, getFont } from '../../theme';
 import { RootStackParamList } from '../../types';
-import { Alert } from 'react-native';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'Clusters'>;
 type RoutePropType = RouteProp<RootStackParamList, 'Clusters'>;
@@ -38,11 +38,28 @@ export default function ClustersScreen() {
 
   // We need albums context for the selection screen
   const { albums, refreshAlbums } = useAlbums();
+  const [confirmModal, setConfirmModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    isDestructive?: boolean;
+    onConfirm: () => void;
+    cancelText?: string;
+    confirmText?: string;
+    hideCancel?: boolean;
+  }>({
+    visible: false, title: '', message: '', onConfirm: () => {}
+  });
+
+  const closeConfirm = () => setConfirmModal(prev => ({ ...prev, visible: false }));
+
   const completedAlbums = albums.filter(a => a.status === 'complete');
 
   const [data, setData] = useState<ClustersResponse | null>(null);
+  const [albumPhotos, setAlbumPhotos] = useState<AlbumPhoto[]>([]);
   const [loading, setLoading] = useState(false);
   const [sortBySize, setSortBySize] = useState(false);
+  const [activeTab, setActiveTab] = useState<'faces' | 'photos'>('faces');
 
   const currentAlbum = albums.find(a => a.album_id === albumId);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
@@ -60,39 +77,47 @@ export default function ClustersScreen() {
     try {
       const res = await getClusters(albumId!);
       setData(res);
+      const photosRes = await getAlbumPhotos(albumId!);
+      setAlbumPhotos(photosRes);
     } catch (e) {
-      console.error('Failed to fetch clusters', e);
+      console.error('Failed to fetch clusters/photos', e);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDeleteAlbum = () => {
-    Alert.alert(
-      "Delete Album",
-      "Are you sure you want to completely delete this album? This cannot be undone.",
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            if (!albumId) return;
-            try {
-              await deleteAlbum(albumId);
-              await refreshAlbums();
-              if (route.params?.albumId) {
-                navigation.navigate('Home' as any);
-              } else {
-                setAlbumId(undefined);
-              }
-            } catch (e) {
-              Alert.alert('Error', 'Failed to delete album');
-            }
+    setConfirmModal({
+      visible: true,
+      title: 'Delete Album',
+      message: 'Are you sure you want to completely delete this album? This cannot be undone.',
+      confirmText: 'Delete',
+      isDestructive: true,
+      onConfirm: async () => {
+        closeConfirm();
+        if (!albumId) return;
+        try {
+          await deleteAlbum(albumId);
+          await refreshAlbums();
+          if (route.params?.albumId) {
+            navigation.navigate('Home' as any);
+          } else {
+            setAlbumId(undefined);
           }
+        } catch (e) {
+          setTimeout(() => {
+            setConfirmModal({
+              visible: true,
+              title: 'Error',
+              message: 'Failed to delete album',
+              confirmText: 'OK',
+              hideCancel: true,
+              onConfirm: closeConfirm
+            });
+          }, 500);
         }
-      ]
-    );
+      }
+    });
   };
 
   const handleRenameAlbum = async () => {
@@ -103,7 +128,14 @@ export default function ClustersScreen() {
       await refreshAlbums();
       setIsRenameModalOpen(false);
     } catch (e) {
-      Alert.alert('Error', 'Failed to rename album');
+      setConfirmModal({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to rename album',
+        confirmText: 'OK',
+        hideCancel: true,
+        onConfirm: closeConfirm
+      });
     } finally {
       setLoading(false);
     }
@@ -136,7 +168,7 @@ export default function ClustersScreen() {
                   const thumbId = (album as any).thumbnail_photo_id || fullAlbum?.thumbnail_photo_id;
 
                   const getPhotoUrl = (aId: string, pId: string) => {
-                    return `${api.defaults.baseURL || 'http://192.168.1.9:8000/api/v1'}/albums/${aId}/photos/${pId}/raw`;
+                    return `${api.defaults.baseURL}/albums/${aId}/photos/${pId}/raw`;
                   };
 
                   return (
@@ -186,7 +218,7 @@ export default function ClustersScreen() {
               </ScrollView>
             )}
           </View>
-          <MockupBottomTabs activeTab="clusters" />
+          <MockupBottomTabs activeTab="albums" />
         </View>
       </AnimatedBackground>
     );
@@ -204,9 +236,14 @@ export default function ClustersScreen() {
 
   const clusters = data?.clusters || [];
   const unidentifiedCount = data?.unidentified_count || 0;
-  const sortedClusters = sortBySize
-    ? [...clusters].sort((a, b) => b.face_count - a.face_count)
-    : clusters;
+  
+  // Sort clusters: "Me" always first, then by size if requested
+  const sortedClusters = [...clusters].sort((a, b) => {
+    if (a.is_me) return -1;
+    if (b.is_me) return 1;
+    if (sortBySize) return b.face_count - a.face_count;
+    return 0; // maintain original alphabetical order if not sorting by size
+  });
 
   return (
     <AnimatedBackground>
@@ -249,10 +286,23 @@ export default function ClustersScreen() {
           </View>
 
           <View style={styles.filterRow}>
-            <View style={[styles.filterPill, { backgroundColor: 'rgba(123,92,245,0.18)', borderColor: 'rgba(123,92,245,0.3)' }]}>
-              <Text style={{ color: palette.violet2, fontSize: 11, fontFamily: getFont('DMSans', '500') }}>
-                All ({clusters.length + (unidentifiedCount > 0 ? 1 : 0)})
-              </Text>
+            <View style={{ flexDirection: 'row', gap: 6, flex: 1 }}>
+              <TouchableOpacity
+                style={[styles.filterPillGhost, activeTab === 'faces' && { backgroundColor: 'rgba(123,92,245,0.18)', borderColor: 'rgba(123,92,245,0.3)' }]}
+                onPress={() => setActiveTab('faces')}
+              >
+                <Text style={[styles.filterPillGhostText, activeTab === 'faces' && { color: palette.violet2, fontFamily: getFont('DMSans', '500') }]}>
+                  Faces ({clusters.length + (unidentifiedCount > 0 ? 1 : 0)})
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.filterPillGhost, activeTab === 'photos' && { backgroundColor: 'rgba(123,92,245,0.18)', borderColor: 'rgba(123,92,245,0.3)' }]}
+                onPress={() => setActiveTab('photos')}
+              >
+                <Text style={[styles.filterPillGhostText, activeTab === 'photos' && { color: palette.violet2, fontFamily: getFont('DMSans', '500') }]}>
+                  Photos ({albumPhotos.length})
+                </Text>
+              </TouchableOpacity>
             </View>
             <TouchableOpacity
               style={[styles.filterPillGhost, sortBySize && { backgroundColor: 'rgba(123,92,245,0.12)', borderColor: 'rgba(123,92,245,0.3)' }]}
@@ -269,91 +319,105 @@ export default function ClustersScreen() {
               <RefreshControl refreshing={loading && clusters.length > 0} onRefresh={fetchData} tintColor={palette.violet2} />
             }
           >
-            {loading && clusters.length === 0 ? (
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%' }}>
-                {[1, 2, 3, 4, 5, 6].map(i => (
-                  <View key={i} style={styles.gridCardPress}>
-                    <GlassCard style={styles.gridCard}>
-                      <SkeletonLoader width={52} height={52} borderRadius={26} />
-                      <SkeletonLoader width={80} height={14} style={{ marginTop: 12 }} />
-                      <SkeletonLoader width={50} height={10} style={{ marginTop: 4 }} />
-                    </GlassCard>
-                  </View>
-                ))}
-              </View>
-            ) : clusters.length === 0 ? (
-              <EmptyState 
-                iconType="cluster"
-                title="No clusters found"
-                subtitle="This album might not have any faces, or clustering failed."
-              />
-            ) : (
-              sortedClusters.map((cluster, i) => {
-              const grad = GRAD_COLORS[i % GRAD_COLORS.length] as [string, string];
-              return (
-                <TouchableOpacity
-                  key={cluster.cluster_label}
-                  style={styles.gridCardPress}
-                  onPress={() => navigation.navigate('ClusterDetail' as any, {
-                    albumId,
-                    clusterLabel: cluster.cluster_label,
-                    displayName: cluster.display_name
-                  })}
-                >
-                  <GlassCard style={styles.gridCard}>
-                    <View style={[styles.avatarBox, { borderColor: i === 0 ? palette.violet2 : palette.border2, overflow: 'hidden' }]}>
-                      {cluster.representative_face ? (
-                        <FaceAvatar
-                          albumId={albumId!}
-                          photoId={cluster.representative_face.photo_id}
-                          bbox={cluster.representative_face.bbox}
-                          size={52}
-                        />
-                      ) : (
-                        <LinearGradient colors={grad} style={StyleSheet.absoluteFill}>
-                          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-                            <Text style={styles.emojiText}>{cluster.display_name.includes('Person') ? '🔍' : '👤'}</Text>
-                          </View>
-                        </LinearGradient>
-                      )}
+            {activeTab === 'photos' ? (
+              albumPhotos.length === 0 ? (
+                <EmptyState 
+                  iconType="cluster"
+                  title="No photos found"
+                  subtitle="This album has no photos yet."
+                />
+              ) : (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 2, paddingHorizontal: 2 }}>
+                  {albumPhotos.map((photo) => (
+                    <View key={photo.photo_id} style={{ width: '32.5%', aspectRatio: 1, marginBottom: 2 }}>
+                      <AuthImage 
+                        url={`${api.defaults.baseURL?.replace('/api/v1', '')}${photo.encrypted_blob_url}`}
+                        style={{ flex: 1, borderRadius: 4, backgroundColor: palette.card }}
+                        resizeMode="cover"
+                      />
                     </View>
-                    <Text style={styles.nameText} numberOfLines={1}>{cluster.display_name}</Text>
-                    <Text style={styles.countText}>{cluster.face_count} photos</Text>
-                  </GlassCard>
-                </TouchableOpacity>
-              );
-            })
-          )}
-
-            {/* Unidentified */}
-            {unidentifiedCount > 0 && (
-              <TouchableOpacity 
-                style={styles.gridCardPress} 
-                onPress={() => navigation.navigate('ClusterDetail' as any, { 
-                  albumId, 
-                  clusterLabel: -1,
-                  displayName: 'Unidentified'
-                })}
-              >
-                <GlassCard style={styles.gridCard}>
-                  <View style={[styles.avatarBox, { backgroundColor: 'rgba(255,255,255,0.05)', borderColor: 'rgba(255,255,255,0.2)', borderStyle: 'dashed' }]}>
-                    <Svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                      <Circle cx="10" cy="7" r="3.5" stroke="rgba(200,208,224,0.3)" strokeWidth="1.3"/>
-                      <Path d="M3 18c0-3.31 3.13-6 7-6" stroke="rgba(200,208,224,0.3)" strokeWidth="1.3" strokeLinecap="round"/>
-                      <Path d="M15 14l2 2 3-3" stroke="rgba(200,208,224,0.3)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-                    </Svg>
+                  ))}
+                </View>
+              )
+            ) : (
+              <>
+                {loading && clusters.length === 0 ? (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, width: '100%' }}>
+                    {[1, 2, 3, 4, 5, 6].map(i => (
+                      <View key={i} style={styles.gridCardPress}>
+                        <GlassCard style={styles.gridCard}>
+                          <SkeletonLoader width={52} height={52} borderRadius={26} />
+                          <SkeletonLoader width={80} height={14} style={{ marginTop: 12 }} />
+                          <SkeletonLoader width={50} height={10} style={{ marginTop: 4 }} />
+                        </GlassCard>
+                      </View>
+                    ))}
                   </View>
-                  <Text style={[styles.nameText, { color: palette.muted }]}>Unidentified</Text>
-                  <Text style={styles.countText}>{unidentifiedCount} faces</Text>
-                  <View style={[styles.pill, { backgroundColor: 'rgba(255,255,255,0.04)', borderColor: palette.border }]}><Text style={[styles.pillText, { color: palette.muted }]}>Review</Text></View>
-                </GlassCard>
-              </TouchableOpacity>
-            )}
-
-            {clusters.length === 0 && unidentifiedCount === 0 && (
-              <View style={[styles.center, { width: '100%', marginTop: 40 }]}>
-                <Text style={{ color: palette.muted, fontFamily: getFont('DMSans', '400') }}>No clusters found yet.</Text>
-              </View>
+                ) : clusters.length === 0 && unidentifiedCount === 0 ? (
+                  <EmptyState 
+                    iconType="cluster"
+                    title="No clusters found"
+                    subtitle="This album might not have any faces, or clustering failed."
+                  />
+                ) : (
+                  <>
+                    {sortedClusters.map((cluster, i) => {
+                      const grad = GRAD_COLORS[i % GRAD_COLORS.length] as [string, string];
+                      const isUnidentified = cluster.cluster_label === -1;
+                      return (
+                        <TouchableOpacity
+                          key={cluster.cluster_label}
+                          style={styles.gridCardPress}
+                          onPress={() => navigation.navigate('ClusterDetail' as any, {
+                            albumId,
+                            clusterLabel: cluster.cluster_label,
+                            displayName: isUnidentified ? 'Unidentified' : cluster.display_name
+                          })}
+                        >
+                          <View style={[styles.polaroidCard, isUnidentified && { borderColor: 'rgba(255,255,255,0.1)', borderWidth: 1 }]}>
+                            <View style={styles.polaroidImageContainer}>
+                              {cluster.representative_face ? (
+                                <FaceAvatar
+                                  albumId={albumId!}
+                                  photoId={cluster.representative_face.photo_id}
+                                  bbox={cluster.representative_face.bbox}
+                                  size={250} // Make large enough to fill container
+                                  borderRadius={0}
+                                />
+                              ) : (
+                                <LinearGradient colors={isUnidentified ? ['rgba(255,255,255,0.05)', 'rgba(255,255,255,0.02)'] : grad} style={StyleSheet.absoluteFill}>
+                                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+                                    {isUnidentified ? (
+                                      <Svg width="30" height="30" viewBox="0 0 20 20" fill="none">
+                                        <Circle cx="10" cy="7" r="3.5" stroke="rgba(200,208,224,0.3)" strokeWidth="1.3"/>
+                                        <Path d="M3 18c0-3.31 3.13-6 7-6" stroke="rgba(200,208,224,0.3)" strokeWidth="1.3" strokeLinecap="round"/>
+                                        <Path d="M15 14l2 2 3-3" stroke="rgba(200,208,224,0.3)" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
+                                      </Svg>
+                                    ) : (
+                                      <Text style={{ fontSize: 32 }}>{cluster.display_name.includes('Person') ? '🔍' : '👤'}</Text>
+                                    )}
+                                  </View>
+                                </LinearGradient>
+                              )}
+                            </View>
+                            <LinearGradient 
+                              colors={['transparent', 'rgba(0,0,0,0.7)', 'rgba(0,0,0,0.95)']} 
+                              style={styles.polaroidBottomBar}
+                            >
+                              <Text style={[styles.polaroidName, isUnidentified && { color: palette.muted }]} numberOfLines={1}>
+                                {isUnidentified ? 'Unidentified' : cluster.display_name}
+                              </Text>
+                              <Text style={styles.polaroidSub}>
+                                {cluster.photo_count ?? cluster.face_count} {isUnidentified ? 'faces' : 'photos'}
+                              </Text>
+                            </LinearGradient>
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
+              </>
             )}
 
           </ScrollView>
@@ -387,8 +451,20 @@ export default function ClustersScreen() {
 
         </View>
 
-        <MockupBottomTabs activeTab="clusters" />
+        <MockupBottomTabs activeTab="albums" />
       </View>
+
+      <ConfirmModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onCancel={closeConfirm}
+        onConfirm={confirmModal.onConfirm}
+        isDestructive={confirmModal.isDestructive}
+        cancelText={confirmModal.cancelText}
+        confirmText={confirmModal.confirmText}
+        hideCancel={confirmModal.hideCancel}
+      />
     </AnimatedBackground>
   );
 }
@@ -407,7 +483,50 @@ const styles = StyleSheet.create({
   filterPillGhostText: { color: palette.muted, fontSize: 11, fontFamily: getFont('DMSans', '400') },
 
   grid: { flex: 1 },
-  gridCardPress: { width: '48.5%', marginBottom: 8 },
+  gridCardPress: { width: '48.5%', marginBottom: 12 },
+  
+  // Polaroid styles
+  polaroidCard: {
+    height: 180,
+    borderRadius: 16,
+    overflow: 'hidden',
+    backgroundColor: palette.card,
+    position: 'relative'
+  },
+  polaroidImageContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+  },
+  polaroidBottomBar: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    padding: 12,
+    paddingTop: 24,
+  },
+  polaroidName: {
+    fontFamily: getFont('Syne', '700'),
+    fontSize: 14,
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
+  },
+  polaroidSub: {
+    fontFamily: getFont('DMSans', '500'),
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 2,
+    textShadowColor: 'rgba(0,0,0,0.8)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
+
+  // (Keeping old gridCard styles around in case they are used elsewhere, though they shouldn't be)
   gridCard: { padding: 12, alignItems: 'center', height: 'auto' },
   avatarBox: { width: 52, height: 52, borderRadius: 26, borderWidth: 2, alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
   emojiText: { fontSize: 22 },

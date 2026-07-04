@@ -5,15 +5,20 @@ import {
 } from 'react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SecureStore from 'expo-secure-store';
 import AnimatedBackground from '../../components/AnimatedBackground';
-import { getClusterPhotos, renameCluster, deletePhotos, ejectPhotos } from '../../services/clusters';
+import ConfirmModal from '../../components/ConfirmModal';
+import FaceAvatar from '../../components/FaceAvatar';
+import ImageViewerModal from '../../components/ImageViewerModal';
+import { getClusterPhotos, getUnidentifiedFaces, renameCluster, deletePhotos, ejectPhotos, deleteCluster, promoteUnidentifiedFaces, deleteFace, mergeFace, createClusterFromFace, getClusters } from '../../services/clusters';
 import api from '../../services/api';
 import { palette, getFont } from '../../theme';
 import { RootStackParamList } from '../../types';
 import { useAlbums } from '../../context/AlbumContext';
+import { downloadPhotos } from '../../utils/export';
 
 type NavProp = NativeStackNavigationProp<RootStackParamList, 'ClusterDetail'>;
 type RoutePropType = RouteProp<RootStackParamList, 'ClusterDetail'>;
@@ -22,24 +27,56 @@ const SCREEN_WIDTH = Dimensions.get('window').width;
 const CELL_SIZE = (SCREEN_WIDTH - 40 - 10) / 3;
 
 export default function ClusterDetailScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<NavProp>();
   const route = useRoute<RoutePropType>();
   const { albumId, clusterLabel, displayName: initialName } = route.params!;
 
   const [photos, setPhotos] = useState<any[]>([]);
+  const [unidentifiedFaces, setUnidentifiedFaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [displayName, setDisplayName] = useState(initialName || `Person ${clusterLabel}`);
   const [isRenameModalOpen, setIsRenameModalOpen] = useState(false);
+  const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
   const [newName, setNewName] = useState(displayName);
+  const [promoteName, setPromoteName] = useState('');
   const [authToken, setAuthToken] = useState<string | null>(null);
 
-  const { refreshAlbums } = useAlbums();
+  // Triage state
+  const [triageFace, setTriageFace] = useState<any | null>(null);
+  const [triageMergeCluster, setTriageMergeCluster] = useState<number | null>(null);
+  const [triageNewName, setTriageNewName] = useState('');
+  const [availableClusters, setAvailableClusters] = useState<any[]>([]);
+  const [isTriageCreating, setIsTriageCreating] = useState(false);
 
-  const [previewUri, setPreviewUri] = useState<string | null>(null);
+  const [viewerVisible, setViewerVisible] = useState(false);
+  const [viewerInitialIndex, setViewerInitialIndex] = useState(0);
+  const [viewerImages, setViewerImages] = useState<string[]>([]);
+
+  const { refreshAlbums } = useAlbums();
 
   // Selection mode state
   const [isSelectionMode, setIsSelectionMode] = useState(false);
   const [selectedPhotoIds, setSelectedPhotoIds] = useState<Set<string>>(new Set());
+  
+  // Download state
+  const [downloading, setDownloading] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState({ done: 0, total: 0 });
+
+  const [confirmModal, setConfirmModal] = useState<{
+    visible: boolean;
+    title: string;
+    message: string;
+    isDestructive?: boolean;
+    onConfirm: () => void;
+    cancelText?: string;
+    confirmText?: string;
+    hideCancel?: boolean;
+  }>({
+    visible: false, title: '', message: '', onConfirm: () => {}
+  });
+
+  const closeConfirm = () => setConfirmModal(prev => ({ ...prev, visible: false }));
 
   useEffect(() => {
     const init = async () => {
@@ -57,10 +94,20 @@ export default function ClusterDetailScreen() {
   const fetchPhotos = async (token: string | null) => {
     setLoading(true);
     try {
-      const res = await getClusterPhotos(albumId, clusterLabel);
-      setPhotos(res.photo_urls);
+      if (clusterLabel === -1) {
+        const [facesRes, clustersRes] = await Promise.all([
+          getUnidentifiedFaces(albumId),
+          getClusters(albumId)
+        ]);
+        setUnidentifiedFaces(facesRes);
+        // Exclude Unidentified (-1) from the merge targets
+        setAvailableClusters(clustersRes.clusters.filter(c => c.cluster_label !== -1));
+      } else {
+        const res = await getClusterPhotos(albumId, clusterLabel);
+        setPhotos(res.photo_urls);
+      }
     } catch (e) {
-      console.error('Failed to fetch cluster photos', e);
+      console.error('Failed to fetch cluster photos/faces', e);
     } finally {
       setLoading(false);
     }
@@ -80,7 +127,14 @@ export default function ClusterDetailScreen() {
       setDisplayName(newName.trim());
       setIsRenameModalOpen(false);
     } catch (e) {
-      Alert.alert('Error', 'Failed to rename cluster. Please try again.');
+      setConfirmModal({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to rename cluster. Please try again.',
+        confirmText: 'OK',
+        hideCancel: true,
+        onConfirm: closeConfirm
+      });
     }
   };
 
@@ -93,7 +147,7 @@ export default function ClusterDetailScreen() {
     }
   };
 
-  const handlePhotoPress = (photoId: string) => {
+  const handlePhotoPress = (photoId: string, index: number) => {
     if (isSelectionMode) {
       setSelectedPhotoIds(prev => {
         const next = new Set(prev);
@@ -102,80 +156,182 @@ export default function ClusterDetailScreen() {
         return next;
       });
     } else {
-      setPreviewUri(getPhotoUrl(photoId));
+      setViewerImages(photos.map(p => getPhotoUrl(p.photo_id)));
+      setViewerInitialIndex(index);
+      setViewerVisible(true);
     }
   };
 
   const handleEject = async () => {
     if (selectedPhotoIds.size === 0) return;
     
-    Alert.alert(
-      "Remove from Person",
-      `Are you sure you want to remove ${selectedPhotoIds.size} photo(s) from this person? They will stay in the album as Unidentified.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await ejectPhotos(albumId, clusterLabel, Array.from(selectedPhotoIds));
-              await fetchPhotos(authToken);
-              setIsSelectionMode(false);
-              setSelectedPhotoIds(new Set());
-            } catch (e) {
-              Alert.alert('Error', 'Failed to remove photos.');
-              setLoading(false);
-            }
-          }
+    setConfirmModal({
+      visible: true,
+      title: 'Remove from Person',
+      message: `Are you sure you want to remove ${selectedPhotoIds.size} photo(s) from this person? They will stay in the album as Unidentified.`,
+      confirmText: 'Remove',
+      isDestructive: true,
+      onConfirm: async () => {
+        closeConfirm();
+        setLoading(true);
+        try {
+          await ejectPhotos(albumId, clusterLabel, Array.from(selectedPhotoIds));
+          setIsSelectionMode(false);
+          setSelectedPhotoIds(new Set());
+          await fetchPhotos(authToken);
+        } catch (e) {
+          setTimeout(() => {
+            setConfirmModal({
+              visible: true, title: 'Error', message: 'Failed to remove photos. Please try again.', confirmText: 'OK', hideCancel: true, onConfirm: closeConfirm
+            });
+          }, 500);
+          setLoading(false);
         }
-      ]
-    );
+      }
+    });
+  };
+
+  // ── Face Triage Handlers ─────────────────────────────────────
+
+  const handleTriageDelete = async () => {
+    if (!triageFace) return;
+    setConfirmModal({
+      visible: true,
+      title: 'Delete Face',
+      message: 'Are you sure you want to completely delete this face data? This action cannot be undone.',
+      confirmText: 'Delete',
+      isDestructive: true,
+      onConfirm: async () => {
+        closeConfirm();
+        setLoading(true);
+        try {
+          await deleteFace(albumId, triageFace.face_detection_id);
+          setTriageFace(null);
+          await fetchPhotos(authToken);
+        } catch (e) {
+          Alert.alert('Error', 'Failed to delete face.');
+          setLoading(false);
+        }
+      }
+    });
+  };
+
+  const handleTriageMerge = async () => {
+    if (!triageFace || triageMergeCluster === null) return;
+    setLoading(true);
+    try {
+      await mergeFace(albumId, triageFace.face_detection_id, triageMergeCluster);
+      setTriageFace(null);
+      setTriageMergeCluster(null);
+      await fetchPhotos(authToken);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to merge face.');
+      setLoading(false);
+    }
+  };
+
+  const handleTriageCreate = async () => {
+    if (!triageFace || !triageNewName.trim()) return;
+    setLoading(true);
+    try {
+      await createClusterFromFace(albumId, triageFace.face_detection_id, triageNewName.trim());
+      setTriageFace(null);
+      setIsTriageCreating(false);
+      setTriageNewName('');
+      await fetchPhotos(authToken);
+    } catch (e) {
+      Alert.alert('Error', 'Failed to create new person.');
+      setLoading(false);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────────
+
+  const handlePromote = async () => {
+    if (!promoteName.trim() || selectedPhotoIds.size === 0) return;
+    try {
+      setLoading(true);
+      await promoteUnidentifiedFaces(albumId, Array.from(selectedPhotoIds), promoteName.trim());
+      await fetchPhotos(authToken);
+      setIsPromoteModalOpen(false);
+      setIsSelectionMode(false);
+      setSelectedPhotoIds(new Set());
+      setPromoteName('');
+    } catch (e) {
+      setConfirmModal({
+        visible: true,
+        title: 'Error',
+        message: 'Failed to promote faces. Please try again.',
+        confirmText: 'OK',
+        hideCancel: true,
+        onConfirm: closeConfirm
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async () => {
     if (selectedPhotoIds.size === 0) return;
     
-    Alert.alert(
-      "Delete completely",
-      `Are you sure you want to completely delete ${selectedPhotoIds.size} photo(s) from this album? This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setLoading(true);
-            try {
-              const res = await deletePhotos(albumId, Array.from(selectedPhotoIds));
-              if (res.album_deleted) {
-                Alert.alert(
-                  'Album Deleted', 
-                  'Because you deleted all photos, the empty album has been automatically deleted.',
-                  [{ text: "OK", onPress: async () => {
-                    await refreshAlbums();
-                    navigation.navigate('Home' as any);
-                  }}]
-                );
-              } else {
-                await fetchPhotos(authToken);
-                setIsSelectionMode(false);
-                setSelectedPhotoIds(new Set());
-              }
-            } catch (e) {
-              Alert.alert('Error', 'Failed to delete photos.');
-              setLoading(false);
-            }
+    setConfirmModal({
+      visible: true,
+      title: 'Delete completely',
+      message: `Are you sure you want to completely delete ${selectedPhotoIds.size} photo(s) from this album? This cannot be undone.`,
+      confirmText: 'Delete',
+      isDestructive: true,
+      onConfirm: async () => {
+        closeConfirm();
+        setLoading(true);
+        try {
+          const res = await deletePhotos(albumId, Array.from(selectedPhotoIds));
+          if (res.album_deleted) {
+            setTimeout(() => {
+              setConfirmModal({
+                visible: true,
+                title: 'Album Deleted',
+                message: 'Because you deleted all photos, the empty album has been automatically deleted.',
+                confirmText: 'OK',
+                hideCancel: true,
+                onConfirm: async () => {
+                  closeConfirm();
+                  await refreshAlbums();
+                  navigation.navigate('Home' as any);
+                }
+              });
+            }, 500);
+          } else {
+            await fetchPhotos(authToken);
+            setIsSelectionMode(false);
+            setSelectedPhotoIds(new Set());
           }
+        } catch (e) {
+          setTimeout(() => {
+            setConfirmModal({
+              visible: true, title: 'Error', message: 'Failed to delete photos.', confirmText: 'OK', hideCancel: true, onConfirm: closeConfirm
+            });
+          }, 500);
+          setLoading(false);
         }
-      ]
-    );
+      }
+    });
+  };
+
+  const handleDownload = async () => {
+    if (selectedPhotoIds.size === 0) return;
+    setDownloading(true);
+    setDownloadProgress({ done: 0, total: selectedPhotoIds.size });
+    await downloadPhotos(albumId, Array.from(selectedPhotoIds), (done, total) => {
+      setDownloadProgress({ done, total });
+    });
+    setDownloading(false);
+    setIsSelectionMode(false);
+    setSelectedPhotoIds(new Set());
   };
 
   return (
     <AnimatedBackground orbs={[{ color: 'rgba(123,92,245,0.14)', size: 160, top: 60, right: -40 }]}>
-      <View style={styles.container}>
+      <View style={[styles.container, { paddingTop: Math.max(insets.top + 10, 60) }]}>
 
         <View style={styles.topBar}>
           <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
@@ -191,19 +347,16 @@ export default function ClusterDetailScreen() {
 
         {/* Profile row */}
         <View style={styles.profileRow}>
-          <LinearGradient colors={['rgba(123,92,245,0.5)', 'rgba(0,212,255,0.4)']} style={styles.avatar}>
-            <Text style={styles.avatarText}>{displayName.includes('Person') ? '🔍' : '👤'}</Text>
-          </LinearGradient>
           <View style={{ flex: 1 }}>
             <Text style={styles.nameText} numberOfLines={1}>{displayName}</Text>
             <View style={styles.pillRow}>
-              <Text style={styles.countText}>{photos.length} photos</Text>
+              <Text style={styles.countText}>{clusterLabel === -1 ? unidentifiedFaces.length : photos.length} {clusterLabel === -1 ? 'faces' : 'photos'}</Text>
             </View>
           </View>
         </View>
         
         {/* Actions moved to top */}
-        {!isSelectionMode && (
+        {!isSelectionMode && clusterLabel !== -1 && (
           <View style={styles.topActionsRow}>
             <TouchableOpacity style={styles.ghostBtn} onPress={() => setIsRenameModalOpen(true)}>
               <Svg width="14" height="14" viewBox="0 0 15 15" fill="none">
@@ -212,14 +365,38 @@ export default function ClusterDetailScreen() {
               <Text style={styles.ghostText}>Rename</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity style={styles.ghostBtn} onPress={() => Alert.alert('Coming Soon', 'Merging clusters will be available in V2.')}>
-              <Svg width="14" height="14" viewBox="0 0 15 15" fill="none">
-                <Circle cx="4" cy="7.5" r="3" stroke={palette.silver} strokeWidth="1.3"/>
-                <Circle cx="11" cy="7.5" r="3" stroke={palette.silver} strokeWidth="1.3"/>
-                <Path d="M7 7.5h1" stroke={palette.silver} strokeWidth="1.3" strokeLinecap="round"/>
-              </Svg>
-              <Text style={styles.ghostText}>Merge</Text>
-            </TouchableOpacity>
+            {clusterLabel !== -1 && (
+              <TouchableOpacity style={[styles.ghostBtn, { borderColor: 'rgba(255,69,58,0.3)', backgroundColor: 'rgba(255,69,58,0.1)' }]} onPress={() => {
+                setConfirmModal({
+                  visible: true,
+                  title: 'Delete Cluster',
+                  message: 'Are you sure you want to delete this cluster? This will move all faces to unidentified, but will NOT delete the photos.',
+                  confirmText: 'Delete',
+                  isDestructive: true,
+                  onConfirm: async () => {
+                    closeConfirm();
+                    setLoading(true);
+                    try {
+                      await deleteCluster(albumId, clusterLabel);
+                      navigation.goBack();
+                    } catch (e) {
+                      setTimeout(() => {
+                        setConfirmModal({
+                          visible: true, title: 'Error', message: 'Failed to delete cluster.', confirmText: 'OK', hideCancel: true, onConfirm: closeConfirm
+                        });
+                      }, 500);
+                      setLoading(false);
+                    }
+                  }
+                });
+              }}>
+                <Svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <Path d="M3 6H5H21" stroke={palette.tomato} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <Path d="M8 6V4C8 3.44772 8.44772 3 9 3H15C15.5523 3 16 3.44772 16 4V6M19 6V20C19 20.5523 18.5523 21 18 21H6C5.44772 21 5 20.5523 5 20V6H19Z" stroke={palette.tomato} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                </Svg>
+                <Text style={[styles.ghostText, { color: palette.tomato }]}>Delete Cluster</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -230,44 +407,88 @@ export default function ClusterDetailScreen() {
           </View>
         ) : (
           <ScrollView contentContainerStyle={styles.grid}>
-            {photos.map((p) => {
-              const isSelected = selectedPhotoIds.has(p.photo_id);
-              return (
-                <TouchableOpacity
-                  key={p.photo_id}
-                  style={[styles.gridCell, isSelected && { borderColor: palette.violet2, borderWidth: 2 }]}
-                  onPress={() => handlePhotoPress(p.photo_id)}
-                  activeOpacity={0.8}
-                >
-                  {authToken ? (
-                    <Image
-                      source={{
-                        uri: getPhotoUrl(p.photo_id),
-                        headers: getAuthHeaders(),
-                      }}
-                      style={[styles.image, !isSelected && isSelectionMode && { opacity: 0.5 }]}
-                      resizeMode="cover"
+            {clusterLabel === -1 ? (
+              unidentifiedFaces.map((f) => {
+                const isSelected = selectedPhotoIds.has(f.photo_id);
+                return (
+                  <TouchableOpacity
+                    key={f.face_detection_id}
+                    style={[styles.gridCell, isSelected && { borderColor: palette.violet2, borderWidth: 2 }]}
+                    onPress={() => {
+                      if (isSelectionMode) {
+                        setSelectedPhotoIds(prev => {
+                          const next = new Set(prev);
+                          if (next.has(f.photo_id)) next.delete(f.photo_id);
+                          else next.add(f.photo_id);
+                          return next;
+                        });
+                      } else {
+                        setTriageFace(f);
+                        setTriageMergeCluster(null);
+                        setIsTriageCreating(false);
+                        setTriageNewName('');
+                      }
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <FaceAvatar
+                      albumId={albumId}
+                      photoId={f.photo_id}
+                      bbox={f.bbox}
+                      size={CELL_SIZE}
                     />
-                  ) : (
-                    <View style={[styles.image, { backgroundColor: palette.glass2, alignItems: 'center', justifyContent: 'center' }]}>
-                      <ActivityIndicator size="small" color={palette.violet2} />
-                    </View>
-                  )}
-                  {isSelected && isSelectionMode && (
-                    <View style={{ position: 'absolute', top: 6, right: 6 }}>
-                      <LinearGradient colors={palette.gradient.hero} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.checkBoxOn}>
-                        <Svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-                          <Path d="M2 5l2.5 2.5 4-4" stroke="white" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
-                        </Svg>
-                      </LinearGradient>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              );
-            })}
-            {photos.length === 0 && (
+                    {isSelected && isSelectionMode && (
+                      <View style={{ position: 'absolute', top: 6, right: 6 }}>
+                        <LinearGradient colors={palette.gradient.hero} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.checkBoxOn}>
+                          <Svg width="14" height="14" viewBox="0 0 10 10" fill="none">
+                            <Path d="M2 5l2.5 2.5 4-4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                          </Svg>
+                        </LinearGradient>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            ) : (
+              photos.map((p, index) => {
+                const isSelected = selectedPhotoIds.has(p.photo_id);
+                return (
+                  <TouchableOpacity
+                    key={p.photo_id}
+                    style={[styles.gridCell, isSelected && { borderColor: palette.violet2, borderWidth: 2 }]}
+                    onPress={() => handlePhotoPress(p.photo_id, index)}
+                    activeOpacity={0.8}
+                  >
+                    {authToken ? (
+                      <Image
+                        source={{
+                          uri: getPhotoUrl(p.photo_id),
+                          headers: getAuthHeaders(),
+                        }}
+                        style={styles.image}
+                        resizeMode="cover"
+                      />
+                    ) : (
+                      <View style={[styles.image, { backgroundColor: palette.glass2, alignItems: 'center', justifyContent: 'center' }]}>
+                        <ActivityIndicator size="small" color={palette.violet2} />
+                      </View>
+                    )}
+                    {isSelected && isSelectionMode && (
+                      <View style={{ position: 'absolute', top: 6, right: 6 }}>
+                        <LinearGradient colors={palette.gradient.hero} start={{x:0,y:0}} end={{x:1,y:1}} style={styles.checkBoxOn}>
+                          <Svg width="14" height="14" viewBox="0 0 10 10" fill="none">
+                            <Path d="M2 5l2.5 2.5 4-4" stroke="white" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"/>
+                          </Svg>
+                        </LinearGradient>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                );
+              })
+            )}
+            {photos.length === 0 && unidentifiedFaces.length === 0 && (
               <View style={[styles.center, { width: '100%', marginTop: 40 }]}>
-                <Text style={{ color: palette.muted, fontFamily: getFont('DMSans', '400') }}>No photos in this cluster.</Text>
+                <Text style={{ color: palette.muted, fontFamily: getFont('DMSans', '400') }}>No items found.</Text>
               </View>
             )}
           </ScrollView>
@@ -276,28 +497,151 @@ export default function ClusterDetailScreen() {
         {/* Floating Action Bar for Selection Mode */}
         {isSelectionMode && (
           <View style={styles.selectionActionBar}>
-            <TouchableOpacity 
-              style={[styles.actionBtn, selectedPhotoIds.size === 0 && { opacity: 0.5 }]} 
-              onPress={handleEject}
-              disabled={selectedPhotoIds.size === 0}
-            >
-              <Text style={styles.actionBtnText}>Remove from Person</Text>
-            </TouchableOpacity>
-            
-            <View style={styles.actionDivider} />
-            
-            <TouchableOpacity 
-              style={[styles.actionBtn, selectedPhotoIds.size === 0 && { opacity: 0.5 }]} 
-              onPress={handleDelete}
-              disabled={selectedPhotoIds.size === 0}
-            >
-              <Text style={[styles.actionBtnText, { color: '#FF453A' }]}>Delete completely</Text>
-            </TouchableOpacity>
+            {clusterLabel === -1 ? (
+              <TouchableOpacity 
+                style={[styles.actionBtn, selectedPhotoIds.size === 0 && { opacity: 0.5 }]} 
+                onPress={() => setIsPromoteModalOpen(true)}
+                disabled={selectedPhotoIds.size === 0 || downloading}
+              >
+                <Text style={[styles.actionBtnText, { color: palette.violet2 }]}>Create Person</Text>
+              </TouchableOpacity>
+            ) : (
+              <>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, selectedPhotoIds.size === 0 && { opacity: 0.5 }]} 
+                  onPress={handleDownload}
+                  disabled={selectedPhotoIds.size === 0 || downloading}
+                >
+                  {downloading ? (
+                    <ActivityIndicator size="small" color={palette.violet2} />
+                  ) : (
+                    <Text style={[styles.actionBtnText, { color: palette.violet2 }]}>Download</Text>
+                  )}
+                </TouchableOpacity>
+                
+                <View style={styles.actionDivider} />
+
+                <TouchableOpacity 
+                  style={[styles.actionBtn, selectedPhotoIds.size === 0 && { opacity: 0.5 }]} 
+                  onPress={handleEject}
+                  disabled={selectedPhotoIds.size === 0 || downloading}
+                >
+                  <Text style={styles.actionBtnText}>Remove</Text>
+                </TouchableOpacity>
+                
+                <View style={styles.actionDivider} />
+                
+                <TouchableOpacity 
+                  style={[styles.actionBtn, selectedPhotoIds.size === 0 && { opacity: 0.5 }]} 
+                  onPress={handleDelete}
+                  disabled={selectedPhotoIds.size === 0 || downloading}
+                >
+                  <Text style={[styles.actionBtnText, { color: '#FF453A' }]}>Delete</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         )}
 
-        {/* Rename Modal */}
-        <Modal visible={isRenameModalOpen} transparent animationType="fade">
+      {/* Triage Modal */}
+      <Modal visible={!!triageFace} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Triage Face</Text>
+            
+            {triageFace && (
+              <View style={{ alignItems: 'center', marginBottom: 20 }}>
+                <FaceAvatar
+                  albumId={albumId}
+                  photoId={triageFace.photo_id}
+                  bbox={triageFace.bbox}
+                  size={120}
+                />
+              </View>
+            )}
+
+            {!isTriageCreating ? (
+              <>
+                <Text style={[styles.headerSub, { marginBottom: 16, textAlign: 'center' }]}>What would you like to do with this face?</Text>
+                
+                {/* Create New Person */}
+                <TouchableOpacity style={[styles.actionBtn, { flex: 0, borderRadius: 12, marginBottom: 10, borderColor: palette.violet2, borderWidth: 1 }]} onPress={() => setIsTriageCreating(true)}>
+                  <Text style={[styles.actionBtnText, { color: palette.violet2 }]}>Create New Person</Text>
+                </TouchableOpacity>
+                
+                {/* Merge into Existing */}
+                {availableClusters.length > 0 && (
+                  <View style={{ marginBottom: 10 }}>
+                    <Text style={[styles.headerSub, { marginBottom: 6 }]}>Merge into existing:</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                      {availableClusters.map(c => (
+                        <TouchableOpacity
+                          key={c.cluster_label}
+                          style={[styles.filterPillGhost, { marginRight: 8 }, triageMergeCluster === c.cluster_label && { borderColor: palette.violet2, backgroundColor: 'rgba(123,92,245,0.1)' }]}
+                          onPress={() => setTriageMergeCluster(c.cluster_label)}
+                        >
+                          <Text style={[styles.filterPillGhostText, triageMergeCluster === c.cluster_label && { color: palette.violet2 }]}>{c.display_name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                    {triageMergeCluster !== null && (
+                      <TouchableOpacity style={[styles.modalConfirm, { flex: 0, marginTop: 10 }]} onPress={handleTriageMerge}>
+                        <Text style={styles.modalConfirmText}>Confirm Merge</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                )}
+
+                {/* Delete Face */}
+                <TouchableOpacity style={[styles.actionBtn, { flex: 0, borderRadius: 12, marginTop: 10, backgroundColor: 'rgba(255, 69, 58, 0.1)' }]} onPress={handleTriageDelete}>
+                  <Text style={[styles.actionBtnText, { color: palette.tomato }]}>Delete Face Data</Text>
+                </TouchableOpacity>
+
+                {/* Cancel */}
+                <TouchableOpacity style={[styles.modalCancel, { flex: 0, marginTop: 16 }]} onPress={() => { setTriageFace(null); setTriageMergeCluster(null); }}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+              </>
+            ) : (
+              <>
+                <Text style={[styles.headerSub, { marginBottom: 16, textAlign: 'center' }]}>Name this new person:</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  autoFocus
+                  value={triageNewName}
+                  onChangeText={setTriageNewName}
+                  placeholder="Enter name"
+                  placeholderTextColor={palette.muted}
+                />
+                <View style={styles.modalButtons}>
+                  <TouchableOpacity onPress={() => setIsTriageCreating(false)} style={styles.modalCancel}>
+                    <Text style={styles.modalCancelText}>Back</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={handleTriageCreate} style={styles.modalConfirm} disabled={!triageNewName.trim()}>
+                    <Text style={styles.modalConfirmText}>Create</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+            
+          </View>
+        </View>
+      </Modal>
+
+      <ConfirmModal
+        visible={confirmModal.visible}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        onCancel={closeConfirm}
+        onConfirm={confirmModal.onConfirm}
+        isDestructive={confirmModal.isDestructive}
+        cancelText={confirmModal.cancelText}
+        confirmText={confirmModal.confirmText}
+        hideCancel={confirmModal.hideCancel}
+      />
+
+      {/* Rename Modal */}
+      <Modal visible={isRenameModalOpen} transparent animationType="fade">
           <View style={styles.modalOverlay}>
             <View style={styles.modalCard}>
               <Text style={styles.modalTitle}>Rename person</Text>
@@ -321,28 +665,45 @@ export default function ClusterDetailScreen() {
               </View>
             </View>
           </View>
-        </Modal>
+      </Modal>
+
+      {/* Promote Modal */}
+      <Modal visible={isPromoteModalOpen} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalCard}>
+              <Text style={styles.modalTitle}>Group Selected Faces</Text>
+              <Text style={{ color: palette.muted, marginBottom: 16, fontFamily: getFont('DMSans', '400') }}>
+                These faces will be grouped into a new person. Enter a name for this person.
+              </Text>
+              <TextInput
+                style={styles.modalInput}
+                autoFocus
+                value={promoteName}
+                onChangeText={setPromoteName}
+                placeholder="Enter name (e.g. John)"
+                placeholderTextColor={palette.muted}
+                returnKeyType="done"
+                onSubmitEditing={handlePromote}
+              />
+              <View style={styles.modalButtons}>
+                <TouchableOpacity onPress={() => { setIsPromoteModalOpen(false); setPromoteName(''); }} style={styles.modalCancel}>
+                  <Text style={styles.modalCancelText}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={handlePromote} style={styles.modalConfirm}>
+                  <Text style={styles.modalConfirmText}>Create Person</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+      </Modal>
 
         {/* Full-screen photo preview modal */}
-        <Modal visible={!!previewUri} transparent animationType="fade">
-          <View style={styles.previewOverlay}>
-            <TouchableOpacity style={styles.previewClose} onPress={() => setPreviewUri(null)}>
-              <Svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <Path d="M18 6L6 18M6 6l12 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-              </Svg>
-            </TouchableOpacity>
-            {previewUri && authToken && (
-              <Image 
-                source={{ 
-                  uri: previewUri, 
-                  headers: getAuthHeaders() 
-                }} 
-                style={styles.previewImage} 
-                resizeMode="contain" 
-              />
-            )}
-          </View>
-        </Modal>
+        <ImageViewerModal
+          visible={viewerVisible}
+          images={viewerImages}
+          initialIndex={viewerInitialIndex}
+          onClose={() => setViewerVisible(false)}
+        />
 
       </View>
     </AnimatedBackground>
@@ -350,7 +711,7 @@ export default function ClusterDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, paddingTop: 60 },
+  container: { flex: 1 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   topBar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 },
   backBtn: { width: 36, height: 36, backgroundColor: palette.glass2, borderWidth: 1, borderColor: palette.border, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
@@ -370,9 +731,9 @@ const styles = StyleSheet.create({
   ghostText: { color: palette.silver2, fontSize: 12, fontFamily: getFont('Syne', '700') },
 
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 5, paddingHorizontal: 20, paddingBottom: 100 }, // extra padding for bottom bar
-  gridCell: { width: CELL_SIZE, height: CELL_SIZE, borderRadius: 10, borderWidth: 1, borderColor: palette.border, overflow: 'hidden' },
+  gridCell: { width: CELL_SIZE, height: CELL_SIZE, borderRadius: 10, borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
   image: { width: '100%', height: '100%' },
-  checkBoxOn: { width: 22, height: 22, borderRadius: 7, alignItems: 'center', justifyContent: 'center' },
+  checkBoxOn: { width: 26, height: 26, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
 
   selectionActionBar: { position: 'absolute', bottom: 30, left: 20, right: 20, flexDirection: 'row', backgroundColor: 'rgba(25,25,35,0.95)', borderRadius: 16, borderWidth: 1, borderColor: palette.border2, overflow: 'hidden' },
   actionBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 16 },
@@ -391,5 +752,9 @@ const styles = StyleSheet.create({
 
   previewOverlay: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
   previewClose: { position: 'absolute', top: 50, right: 20, zIndex: 10, padding: 10 },
-  previewImage: { width: '100%', height: '100%' }
+  previewImage: { width: '100%', height: '100%' },
+
+  headerSub: { color: palette.silver2, fontFamily: getFont('DMSans', '500'), fontSize: 14 },
+  filterPillGhost: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: palette.border, backgroundColor: palette.glass },
+  filterPillGhostText: { color: palette.muted, fontFamily: getFont('Syne', '700'), fontSize: 13 },
 });

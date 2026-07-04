@@ -8,10 +8,12 @@ export interface ClusterInfo {
   cluster_label: number;
   display_name: string;
   face_count: number;
+  photo_count?: number;
   representative_face?: {
     photo_id: string;
     bbox: [number, number, number, number];
   };
+  is_me?: boolean;
 }
 
 export interface ClustersResponse {
@@ -41,6 +43,7 @@ export async function getClusterPhotos(
     photo_id: string;
     encrypted_blob_url: string;
     faces_in_cluster: number;
+    face_ids: string[];
   }>;
 }> {
   const res = await api.get(`/albums/${albumId}/clusters/${clusterLabel}/photos`);
@@ -58,6 +61,16 @@ export async function renameCluster(
   await api.patch(`/albums/${albumId}/clusters/${clusterLabel}/rename`, {
     new_name: newName,
   });
+}
+
+/**
+ * Delete a cluster entirely, moving all its faces to unidentified.
+ */
+export async function deleteCluster(
+  albumId: string,
+  clusterLabel: number
+): Promise<void> {
+  await api.delete(`/albums/${albumId}/clusters/${clusterLabel}`);
 }
 
 /**
@@ -88,6 +101,45 @@ export async function ejectFace(
   });
 }
 
+// ── Face Triage Override Endpoints ─────────────────────────────────────
+
+/**
+ * Hard delete a single face detection.
+ */
+export async function deleteFace(
+  albumId: string,
+  faceId: string
+): Promise<void> {
+  await api.delete(`/albums/${albumId}/faces/${faceId}`);
+}
+
+/**
+ * Merge a single face into an existing cluster.
+ */
+export async function mergeFace(
+  albumId: string,
+  faceId: string,
+  targetClusterLabel: number
+): Promise<void> {
+  await api.patch(`/albums/${albumId}/faces/${faceId}/merge`, {
+    target_cluster_label: targetClusterLabel,
+  });
+}
+
+/**
+ * Promote a single face to a brand new cluster.
+ */
+export async function createClusterFromFace(
+  albumId: string,
+  faceId: string,
+  newName: string
+): Promise<{ new_cluster_label: number }> {
+  const res = await api.post(`/albums/${albumId}/faces/${faceId}/create_cluster`, {
+    new_name: newName,
+  });
+  return res.data;
+}
+
 /**
  * Eject multiple photos from a cluster.
  */
@@ -111,6 +163,35 @@ export async function deletePhotos(
   // Axios delete with body requires 'data'
   const res = await api.delete(`/albums/${albumId}/photos`, {
     data: { photo_ids: photoIds },
+  });
+  return res.data;
+}
+
+export interface UnidentifiedFace {
+  photo_id: string;
+  bbox: [number, number, number, number];
+  face_detection_id: string;
+}
+
+/**
+ * Get all unidentified faces for an album.
+ */
+export async function getUnidentifiedFaces(albumId: string): Promise<UnidentifiedFace[]> {
+  const res = await api.get(`/albums/${albumId}/clusters/-1/faces`);
+  return res.data.faces;
+}
+
+/**
+ * Promote selected unidentified faces to a named cluster.
+ */
+export async function promoteUnidentifiedFaces(
+  albumId: string,
+  photoIds: string[],
+  newName: string
+): Promise<{ success: boolean; faces_promoted: number; cluster_label: number }> {
+  const res = await api.post(`/albums/${albumId}/clusters/-1/promote`, {
+    photo_ids: photoIds,
+    new_name: newName,
   });
   return res.data;
 }
