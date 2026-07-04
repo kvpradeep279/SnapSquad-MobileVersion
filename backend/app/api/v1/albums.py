@@ -22,6 +22,9 @@ ARCHITECTURE:
 """
 
 import json
+import logging
+import os
+import traceback
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy import select
@@ -53,9 +56,16 @@ def list_albums(
 
     Used by the Home screen to display recent albums with status pills.
     """
+    from app.models.room import Room
+    shadow_album_ids = db.query(Room.shadow_album_id).filter(Room.shadow_album_id.isnot(None)).subquery()
+
     albums = (
         db.query(Album)
-        .filter(Album.user_id == user_id)
+        .filter(
+            Album.user_id == user_id,
+            Album.id.not_in(shadow_album_ids),
+            Album.room_id.is_(None)
+        )
         .order_by(Album.created_at.desc())
         .all()
     )
@@ -117,66 +127,128 @@ def upload_photo(
         - Protected embeddings in the face_detections table
         - Photo metadata in the photos table
     """
-    # Validate album exists and belongs to this user
+    _log = logging.getLogger("upload_photo")
+    try:
+        # Validate album exists and belongs to this user
+        album = db.get(Album, album_id)
+        if not album:
+            raise HTTPException(status_code=404, detail="Album not found")
+        if album.user_id != user_id:
+            raise HTTPException(status_code=403, detail="Not your album")
+
+        # Parse the metadata JSON
+        try:
+            upload_req = PhotoUploadRequest.model_validate_json(metadata)
+        except Exception as parse_exc:
+            _log.error(f"[UPLOAD] metadata parse error: {parse_exc}")
+            raise HTTPException(status_code=400, detail="Invalid metadata JSON")
+
+        # Store the encrypted blob (R2 if configured, local filesystem as fallback)
+        store = get_write_store()
+        blob_data = encrypted_blob.file.read()
+        _log.warning(f"[UPLOAD] photo_id={upload_req.photo_id} blob_size={len(blob_data)} faces={len(upload_req.faces)}")
+        try:
+            blob_path = store.save_encrypted_blob(album_id, upload_req.photo_id, blob_data)
+        except Exception as exc:
+            _log.error(f"[UPLOAD] Storage error: {exc}\n{traceback.format_exc()}")
+            raise HTTPException(status_code=500, detail=f"Storage error: {exc}")
+
+        # Create Photo record
+        photo = Photo(
+            id=upload_req.photo_id,
+            album_id=album_id,
+            uploader_id=user_id,
+            encrypted_blob_url=blob_path,
+            face_count=len(upload_req.faces),
+            original_filename=upload_req.original_filename,
+        )
+        db.add(photo)
+        db.flush()  # Ensure photo is inserted before face_detections reference its ID
+
+        # Store each face detection with its protected embedding
+        for face in upload_req.faces:
+            fd = FaceDetection(
+                photo_id=upload_req.photo_id,
+                album_id=album_id,
+                face_index=face.face_index,
+                bbox=",".join(str(v) for v in face.bbox),
+                det_score=face.det_score,
+                embedding_json=json.dumps(face.embedding),
+                embedding_vec=face.embedding,
+            )
+            db.add(fd)
+
+        # Update album counters
+        album.total_photos += 1
+        album.total_faces += len(upload_req.faces)
+        album.status = "uploading"
+
+        db.commit()
+
+        return PhotoUploadResponse(
+            photo_id=upload_req.photo_id,
+            faces_stored=len(upload_req.faces),
+            status="success"
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _log.error(f"[UPLOAD] Unhandled 500: {exc}\n{traceback.format_exc()}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Upload failed: {exc}")
+
+
+# ── List Photos ──────────────────────────────────────────────────
+
+@router.get("/{album_id}/photos")
+def get_album_photos(
+    album_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+):
+    """List all photos uploaded to this album.
+    Returns photo IDs and their download URLs.
+    """
     album = db.get(Album, album_id)
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
+    
+    # Check ownership (or room access)
     if album.user_id != user_id:
-        raise HTTPException(status_code=403, detail="Not your album")
+        from app.models.room import Room
+        from app.models.room_member import RoomMember
+        room = db.query(Room).filter(Room.shadow_album_id == album_id).first()
+        if not room:
+            raise HTTPException(status_code=403, detail="Not your album")
+        member = db.query(RoomMember).filter(
+            RoomMember.room_id == room.id,
+            RoomMember.user_id == user_id,
+            RoomMember.status == "approved"
+        ).first()
+        if not member:
+            raise HTTPException(status_code=403, detail="Not authorized to access this album")
 
-    # Parse the metadata JSON
-    try:
-        upload_req = PhotoUploadRequest.model_validate_json(metadata)
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid metadata JSON")
+    photos = db.query(Photo).filter(Photo.album_id == album_id).all()
+    
+    photo_urls = []
+    for photo in photos:
+        # Reusing the existing download endpoint logic from clusters.py 
+        # (or assuming a direct photo download endpoint exists, wait we don't have one? 
+        # The frontend uses `/albums/{album_id}/clusters/{cluster_label}/download/{photo_id}` 
+        # We can just use cluster_label=0 or create a direct photo download endpoint.)
+        # Let's just create a generic URL pattern that the frontend uses.
+        # It's better to just use the direct room photo download if it's a room, or album download.
+        photo_urls.append({
+            "photo_id": photo.id,
+            "encrypted_blob_url": f"/api/v1/albums/{album_id}/photos/{photo.id}/raw", 
+            "original_filename": photo.original_filename
+        })
 
-    # Store the encrypted blob (R2 if configured, local filesystem as fallback)
-    store = get_write_store()
-    blob_data = encrypted_blob.file.read()
-    try:
-        blob_path = store.save_encrypted_blob(album_id, upload_req.photo_id, blob_data)
-    except Exception as exc:
-        raise HTTPException(status_code=500, detail=f"Storage error: {exc}")
-
-    # Create Photo record
-    photo = Photo(
-        id=upload_req.photo_id,
-        album_id=album_id,
-        uploader_id=user_id,
-        encrypted_blob_url=blob_path,
-        face_count=len(upload_req.faces),
-        original_filename=upload_req.original_filename,
-    )
-    db.add(photo)
-    db.flush()  # Ensure photo is inserted before face_detections reference its ID
-
-    # Store each face detection with its protected embedding
-    for face in upload_req.faces:
-        fd = FaceDetection(
-            photo_id=upload_req.photo_id,
-            album_id=album_id,
-            face_index=face.face_index,
-            bbox=",".join(str(v) for v in face.bbox),
-            det_score=face.det_score,
-            embedding_json=json.dumps(face.embedding),
-        )
-        db.add(fd)
-
-    # Update album counters
-    album.total_photos += 1
-    album.total_faces += len(upload_req.faces)
-    album.status = "uploading"
-
-    db.commit()
-
-    return PhotoUploadResponse(
-        photo_id=upload_req.photo_id,
-        faces_stored=len(upload_req.faces),
-        status="stored",
-    )
+    return {"photos": photo_urls}
 
 
-# ── Trigger Clustering ───────────────────────────────────────────
+# ── Process Album ─────────────────────────────────────────────────
 
 @router.post("/{album_id}/process", response_model=ProcessAlbumResponse)
 def process_album(
@@ -284,6 +356,10 @@ def debug_album_clustering(
     Use this after running /process to understand why clustering fails.
     Returns per-face cluster assignments and embedding pairwise similarities.
     """
+    import os
+    if os.environ.get("DEV_MODE") != "true":
+        raise HTTPException(status_code=403, detail="Debug endpoint disabled in production")
+        
     import json
     import numpy as np
     from app.models.face_detection import FaceDetection
@@ -366,9 +442,28 @@ def get_photo_blob(
     if photo.uploader_id != user_id:
         raise HTTPException(status_code=403, detail="Unauthorized access to photo")
 
-    store = LocalStore()
-    blob_path = store.get_encrypted_blob_path(album_id, photo_id)
-    return FileResponse(blob_path)
+    # Auto-detect which store holds this photo
+    try:
+        from app.services.storage.storage_backend import get_store_for_path
+        store = get_store_for_path(photo.encrypted_blob_url)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    from app.services.storage.r2_store import R2Store
+    if isinstance(store, R2Store):
+        from fastapi.responses import StreamingResponse
+        try:
+            body, length = store.stream_encrypted_blob(photo.encrypted_blob_url)
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail=f"Photo not available: {exc}")
+        return StreamingResponse(
+            body.iter_chunks(chunk_size=65536),
+            media_type="application/octet-stream",
+            headers={"Content-Length": str(length)} if length else {},
+        )
+    else:
+        blob_path = store.get_encrypted_blob_path(album_id, photo_id)
+        return FileResponse(blob_path)
 
 
 # ── Serve Raw Photo (DEV ONLY) ───────────────────────────────────
@@ -392,7 +487,26 @@ def get_photo_raw(
     if not photo:
         raise HTTPException(status_code=404, detail="Photo not found")
     if photo.uploader_id != user_id:
-        raise HTTPException(status_code=403, detail="Unauthorized access to photo")
+        # Check if the user owns the album (personal album owner) or is a member of the room this shadow album belongs to
+        album = db.get(Album, album_id)
+        is_authorized = False
+        if album and album.user_id == user_id:
+            is_authorized = True
+        else:
+            from app.models.room import Room
+            from app.models.room_member import RoomMember
+            room = db.query(Room).filter(Room.shadow_album_id == album_id).first()
+            if room:
+                member = db.query(RoomMember).filter(
+                    RoomMember.room_id == room.id,
+                    RoomMember.user_id == user_id,
+                    RoomMember.status == "approved"
+                ).first()
+                if member:
+                    is_authorized = True
+        
+        if not is_authorized:
+            raise HTTPException(status_code=403, detail="Unauthorized access to photo")
 
     # Auto-detect which store holds this photo (R2 key vs local path)
     try:
@@ -414,8 +528,14 @@ def get_photo_raw(
             headers={"Content-Length": str(length)} if length else {},
         )
     else:
-        blob_path = store.get_encrypted_blob_path(album_id, photo_id)
-        return FileResponse(blob_path, media_type="image/jpeg")
+        # Use LocalStore's read method which handles both absolute and relative paths.
+        # (Some old photos may have "albums/..." relative paths instead of absolute paths)
+        try:
+            data = store.read_encrypted_blob(photo.encrypted_blob_url)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Photo file not found on server")
+        from fastapi.responses import Response
+        return Response(content=data, media_type="image/jpeg")
 
 
 # ── Photo Deletion & Cluster Ejection ────────────────────────────
@@ -437,12 +557,12 @@ def delete_photos(
     if not album:
         raise HTTPException(status_code=404, detail="Album not found")
         
-    store = LocalStore()
+    from app.services.storage.storage_backend import get_store_for_path
     
     photos = db.query(Photo).filter(Photo.album_id == album_id, Photo.id.in_(req.photo_ids)).all()
     
     # Delete FaceDetections first to avoid foreign key violation
-    db.query(FaceDetection).filter(FaceDetection.album_id == album_id, FaceDetection.photo_id.in_(req.photo_ids)).delete()
+    db.query(FaceDetection).filter(FaceDetection.album_id == album_id, FaceDetection.photo_id.in_(req.photo_ids)).delete(synchronize_session=False)
     
     for p in photos:
         try:
@@ -452,10 +572,17 @@ def delete_photos(
         except Exception:
             pass  # Don't block deletion if storage cleanup fails
         db.delete(p)
+        
+    # Recompute cluster table since face detections were removed
+    from app.api.v1.clusters import _recompute_cluster_table
+    _recompute_cluster_table(db, album_id)
+    
+    # Update album counts
+    album.total_photos = db.query(Photo).filter(Photo.album_id == album_id).count()
+    album.total_faces = db.query(FaceDetection).filter(FaceDetection.album_id == album_id).count()
     
     # Check if album is now empty
-    remaining_photos = db.query(Photo).filter(Photo.album_id == album_id).count()
-    if remaining_photos == 0:
+    if album.total_photos == 0:
         # Auto-delete the album
         from app.models.cluster import Cluster
         from app.models.edit import ClusterEdit

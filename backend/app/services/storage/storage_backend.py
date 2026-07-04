@@ -69,9 +69,13 @@ def get_store_for_path(encrypted_blob_url: str):
         if settings.r2_configured:
             return R2Store()
         else:
-            raise RuntimeError(
-                f"Photo has an R2 key ({encrypted_blob_url}) but R2 is not configured. "
-                "Set R2 credentials in .env."
+            # Path looks like an R2 key (e.g. "albums/abc/photo.enc") but R2 is not configured.
+            # This happens when LocalStore saved a relative path. Fall back to LocalStore
+            # so it can attempt to resolve the path relative to data_dir.
+            logger.warning(
+                f"[Storage] Path looks like R2 key ({encrypted_blob_url}) but R2 is not configured. "
+                "Falling back to LocalStore — file may not be found if it was stored elsewhere."
             )
+            return LocalStore()
     else:
         return LocalStore()

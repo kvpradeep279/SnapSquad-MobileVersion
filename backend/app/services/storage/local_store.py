@@ -47,8 +47,16 @@ class LocalStore:
         return str(self.album_dir(album_id) / f"{photo_id}.enc")
 
     def read_encrypted_blob(self, path: str) -> bytes:
-        """Read an encrypted photo blob from disk."""
-        return Path(path).read_bytes()
+        """Read an encrypted photo blob from disk.
+        
+        Handles both absolute paths and legacy relative paths (e.g. 'albums/...')
+        by trying data_dir as a prefix when the path doesn't exist as-is.
+        """
+        p = Path(path)
+        if not p.exists():
+            # Try resolving relative to data_dir (handles legacy paths like "albums/abc/photo.enc")
+            p = self.root / path
+        return p.read_bytes()
 
     def delete_encrypted_blob(self, path: str) -> None:
         """Delete an encrypted photo blob (after user downloads it)."""

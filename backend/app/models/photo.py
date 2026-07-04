@@ -13,6 +13,7 @@ V2: Photos tagged with room_id for group access. Deleted after all
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
@@ -35,6 +36,12 @@ class Photo(Base):
 
     # Where the encrypted blob lives (Cloudinary URL or local file path)
     encrypted_blob_url: Mapped[str] = mapped_column(Text, default="")
+
+    # V2: which room this photo was uploaded to (via shadow album)
+    # NULL for V1 personal albums
+    room_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("rooms.id"), nullable=True, default=None, index=True
+    )
 
     # Number of faces detected in this photo (by the mobile app)
     face_count: Mapped[int] = mapped_column(Integer, default=0)
