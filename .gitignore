@@ -63,6 +63,8 @@ backend/pipeline_output/
 backend/*.egg-info/
 backend/dist/
 backend/build/
+backend/.pytest_cache/
+backend/venv/
 
 # ── Notebooks ────────────────────────────────────────
 # Keep .ipynb and .json configs, ignore heavy local files
@@ -74,6 +76,9 @@ Notebooks/models/
 Notebooks/test_images/
 Notebooks/pipeline_output/
 Notebooks/pipeline_v2_output/
+Notebooks/pipeline_v3_output/
+Notebooks/pipeline_v7_output/
+Notebooks/*.whl
 
 # ── General Python ───────────────────────────────────
 *.egg
@@ -98,3 +103,11 @@ frontend_Ideations/
 # Ignore backend local run-time data & logs
 /backend/backend_data/
 /backend/server_log.txt
+
+# Databases
+*.db
+*.sqlite
+
+# Local datasets
+/Dataset/
+/Dataset2/
