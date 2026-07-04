@@ -15,13 +15,25 @@ def get_your_people(
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    """Get aggregated 'Your People' across all albums."""
+    from sqlalchemy import or_
+    from app.models.room import Room
+    from app.models.room_member import RoomMember
+
+    room_album_ids = [
+        row[0] for row in db.query(Room.shadow_album_id).join(
+            RoomMember, Room.id == RoomMember.room_id
+        ).filter(
+            RoomMember.user_id == user_id,
+            RoomMember.status == "approved",
+            Room.shadow_album_id.isnot(None)
+        ).all()
+    ]
+
     clusters = db.query(Cluster, Album).join(Album, Cluster.album_id == Album.id).filter(
-        Album.user_id == user_id,
+        or_(Album.user_id == user_id, Album.id.in_(room_album_ids)),
         ~Cluster.display_name.like("Person %"),
         Cluster.display_name != ""
     ).all()
-    
     people_map = {}
     for c, a in clusters:
         name = c.display_name
@@ -60,12 +72,24 @@ def get_person_photos(
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    """Get all photos for a named person across all albums, perfectly deduplicated."""
+    from sqlalchemy import or_
+    from app.models.room import Room
+    from app.models.room_member import RoomMember
+
+    room_album_ids = [
+        row[0] for row in db.query(Room.shadow_album_id).join(
+            RoomMember, Room.id == RoomMember.room_id
+        ).filter(
+            RoomMember.user_id == user_id,
+            RoomMember.status == "approved",
+            Room.shadow_album_id.isnot(None)
+        ).all()
+    ]
+
     clusters = db.query(Cluster, Album).join(Album, Cluster.album_id == Album.id).filter(
-        Album.user_id == user_id,
+        or_(Album.user_id == user_id, Album.id.in_(room_album_ids)),
         Cluster.display_name == name
     ).all()
-    
     unique_photos = {}
     
     for c, a in clusters:
