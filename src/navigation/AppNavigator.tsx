@@ -8,7 +8,6 @@ import { palette } from '../theme';
 // Screens
 import OnboardingScreen from '../screens/onboarding/OnboardingScreen';
 import LoginScreen from '../screens/auth/LoginScreen';
-import SignUpScreen from '../screens/auth/SignUpScreen';
 
 import HomeScreen from '../screens/main/HomeScreen';
 import UploadScreen from '../screens/main/UploadScreen';
@@ -32,10 +31,10 @@ import { RootStackParamList } from '../types';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 const linking = {
-  prefixes: ['snapsquad://'],
+  prefixes: ['Plexida://'],
   config: {
     screens: {
-      // e.g. snapsquad://room/123e4567-e89b-12d3-a456-426614174000
+      // e.g. Plexida://room/123e4567-e89b-12d3-a456-426614174000
       RoomJoin: 'room/:roomId',
     },
   },
@@ -88,7 +87,7 @@ export default function AppNavigator() {
           <>
             <Stack.Screen name="Onboarding" component={OnboardingScreen} />
             <Stack.Screen name="Auth" component={LoginScreen} />
-            <Stack.Screen name="SignUp" component={SignUpScreen} />
+
           </>
         )}
       </Stack.Navigator>

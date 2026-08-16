@@ -1,5 +1,5 @@
 /**
- * GlassCard — SnapSquad Mockup Version
+ * GlassCard — Plexida Mockup Version
  * 
  * Exact 1:1 match for .glass-card in HTML mockup.
  */

@@ -1,5 +1,5 @@
 /**
- * GradientButton — SnapSquad Mockup Version
+ * GradientButton — Plexida Mockup Version
  * 
  * Exact 1:1 match for .glass-btn in HTML mockup.
  */

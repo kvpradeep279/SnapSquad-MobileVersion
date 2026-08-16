@@ -57,7 +57,7 @@ class CloudinaryStore:
         result = cloudinary.uploader.upload(
             blob,
             resource_type="raw",
-            public_id=f"snapsquad/{album_id}/{photo_id}",
+            public_id=f"Plexida/{album_id}/{photo_id}",
             tags=[album_id],
         )
         return result["secure_url"]
@@ -72,8 +72,8 @@ class CloudinaryStore:
         """Delete encrypted blob from Cloudinary."""
         import cloudinary.uploader
         # Extract public_id from URL for deletion
-        # URL format: https://res.cloudinary.com/{cloud}/raw/upload/v{ver}/snapsquad/{album}/{photo}
-        parts = url.split("/snapsquad/")
+        # URL format: https://res.cloudinary.com/{cloud}/raw/upload/v{ver}/Plexida/{album}/{photo}
+        parts = url.split("/Plexida/")
         if len(parts) == 2:
-            public_id = "snapsquad/" + parts[1]
+            public_id = "Plexida/" + parts[1]
             cloudinary.uploader.destroy(public_id, resource_type="raw")

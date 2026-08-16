@@ -77,7 +77,7 @@ export default function RoomJoinScreen() {
       parsed = JSON.parse(data);
     } catch {
       setScanState('error');
-      setResultMessage('Invalid QR code — not a SnapSquad room.');
+      setResultMessage('Invalid QR code — not a Plexida room.');
       return;
     }
 
@@ -91,7 +91,7 @@ export default function RoomJoinScreen() {
     // This ensures this member uses the same permutation space as the creator.
     const roomKey = parsed.room_key || parsed.room_id;
     try {
-      await SecureStore.setItemAsync(`snapsquad_room_key_${parsed.room_id}`, roomKey);
+      await SecureStore.setItemAsync(`Plexida_room_key_${parsed.room_id}`, roomKey);
     } catch (e) {
       console.warn('[RoomJoin] Could not save room_key:', e);
     }
@@ -269,7 +269,7 @@ export default function RoomJoinScreen() {
             <Text style={styles.permissionEmoji}>📷</Text>
             <Text style={styles.permissionTitle}>Camera Access Needed</Text>
             <Text style={styles.permissionSub}>
-              SnapSquad needs camera access to scan room QR codes.
+              Plexida needs camera access to scan room QR codes.
             </Text>
             <TouchableOpacity onPress={requestPermission} style={styles.permissionBtn} activeOpacity={0.85}>
               <LinearGradient
@@ -447,7 +447,7 @@ export default function RoomJoinScreen() {
           </View>
         </View>
 
-        <Text style={styles.scanHint}>Point your camera at a SnapSquad room QR code</Text>
+        <Text style={styles.scanHint}>Point your camera at a Plexida room QR code</Text>
       </SafeAreaView>
       </View>
     );

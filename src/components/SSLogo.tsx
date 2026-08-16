@@ -1,5 +1,5 @@
 /**
- * SSLogo — The Core SnapSquad Identity
+ * SSLogo — The Core Plexida Identity
  * 
  * High-fidelity, animated 3D metallic logo with twirling orbit rings.
  * Features a breathing pulse and a satisfying "crazy satisfying" motion when processing.

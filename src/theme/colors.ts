@@ -1,7 +1,7 @@
 /**
- * SnapSquad Mockup Theme — Colors
+ * Plexida Mockup Theme — Colors
  * 
- * Based directly on snapsquad_full_mockup.html styling
+ * Based directly on Plexida_full_mockup.html styling
  */
 
 export const palette = {

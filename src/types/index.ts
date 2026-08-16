@@ -1,7 +1,6 @@
 export type RootStackParamList = {
   Onboarding: undefined;
   Auth: undefined;
-  SignUp: undefined;
   Main: undefined;
   Home: undefined;
   UploadHub: undefined;

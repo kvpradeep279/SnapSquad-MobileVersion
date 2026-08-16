@@ -82,13 +82,13 @@ export default function OnboardingScreen() {
                 <Circle cx="44" cy="72" r="2.5" fill="rgba(200,208,224,0.5)"/>
                 <Circle cx="22" cy="44" r="2" fill="rgba(123,92,245,0.5)"/>
               </Svg>
-              <Text style={[styles.syneTitle, { fontSize: 26, marginTop: 12 }]}>SnapSquad</Text>
+              <Text style={[styles.syneTitle, { fontSize: 26, marginTop: 12 }]}>Plexida</Text>
             </View>
 
             <View style={{ alignItems: 'center', paddingHorizontal: 16 }}>
               <Text style={styles.syneHeadline}>Every face.</Text>
               <Text style={styles.syneHeadlineGrad}>Every memory.</Text>
-              <Text style={styles.dmDesc}>Upload your group photos and let SnapSquad intelligently cluster every person so your memories are always organized.</Text>
+              <Text style={styles.dmDesc}>Upload your group photos and let Plexida intelligently cluster every person so your memories are always organized.</Text>
             </View>
 
             <View style={{ width: '100%', gap: 16 }}>
@@ -106,7 +106,7 @@ export default function OnboardingScreen() {
         {step === 2 && (
           <View style={styles.contentBetweenTight}>
             <View>
-              <Text style={styles.dmSubtitle}>What SnapSquad does</Text>
+              <Text style={styles.dmSubtitle}>What Plexida does</Text>
               <Text style={[styles.syneHeadline, { textAlign: 'left', marginBottom: 20 }]}>Intelligent{'\n'}<Text style={styles.syneHeadlineGrad}>face clustering</Text></Text>
 
               <View style={{ gap: 10 }}>
@@ -166,7 +166,7 @@ export default function OnboardingScreen() {
                 <Svg width="32" height="32" viewBox="0 0 32 32" fill="none"><Path d="M16 4L6 8v8c0 6.63 4.29 12.83 10 14 5.71-1.17 10-7.37 10-14V8L16 4z" stroke="#4DEBA0" strokeWidth="1.5" strokeLinejoin="round"/><Path d="M11 16l3.5 3.5 6.5-6.5" stroke="#4DEBA0" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></Svg>
               </View>
               <Text style={styles.syneHeadline}>Your data stays{'\n'}<Text style={{color: palette.green}}>yours. Always.</Text></Text>
-              <Text style={styles.dmDesc}>SnapSquad uses end-to-end encryption. Your face data is never sold, never shared, and never stored beyond your session.</Text>
+              <Text style={styles.dmDesc}>Plexida uses end-to-end encryption. Your face data is never sold, never shared, and never stored beyond your session.</Text>
             </View>
 
             <View style={{ width: '100%', gap: 10 }}>

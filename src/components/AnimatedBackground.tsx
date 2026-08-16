@@ -1,5 +1,5 @@
 /**
- * AnimatedBackground — SnapSquad Mockup Version
+ * AnimatedBackground — Plexida Mockup Version
  * 
  * Recreates the deep `.stage` / `.phone` background from the HTML mockup:
  * Base: #050D18 / #07111F

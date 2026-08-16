@@ -1,4 +1,4 @@
-# SnapSquad Pipeline Config (Notebook 15 Architecture)
+# Plexida Pipeline Config (Notebook 15 Architecture)
 
 HDBSCAN_CONFIG = {
     "min_cluster_size": 2,

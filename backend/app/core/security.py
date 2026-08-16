@@ -1,73 +1,52 @@
 """
-Security utilities — JWT token creation/validation and password hashing.
+Security utilities — Firebase ID token verification.
 
-V1: Used for user signup/login with email+password.
-V2: Will add room-scoped token validation (verify user is member of room).
+Replaces the previous custom JWT system. All authentication is now handled
+by Firebase Auth on the client side. The backend verifies Firebase ID tokens
+using the Firebase Admin SDK.
+
+The get_current_user_id() dependency is used by all protected endpoints
+and returns the Firebase UID of the authenticated user.
 """
-
-from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
-import bcrypt
-
-from app.core.config import settings
+from firebase_admin import auth as firebase_auth
 
 # ── Bearer token scheme ──────────────────────────────────────────
 bearer_scheme = HTTPBearer(auto_error=False)
 
-def hash_password(password: str) -> str:
-    """Hash a plaintext password using bcrypt."""
-    salt = bcrypt.gensalt()
-    # bcrypt expects bytes, so we encode the password to utf-8 before hashing
-    hashed_password = bcrypt.hashpw(password.encode("utf-8"), salt)
-    return hashed_password.decode("utf-8")
 
+def verify_firebase_token(id_token: str) -> dict:
+    """Verify a Firebase ID token and return the decoded claims.
 
-def verify_password(password: str, password_hash: str) -> bool:
-    """Verify a plaintext password against a bcrypt hash."""
-    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
+    The token is cryptographically verified against Google's public keys.
+    Returns a dict containing: uid, email, name, picture, email_verified, etc.
 
-
-def create_access_token(subject: str) -> str:
-    """Create a JWT access token with the given subject (user ID).
-
-    Token includes:
-        - sub: user ID
-        - iat: issued-at timestamp
-        - exp: expiration timestamp (settings.jwt_exp_minutes from now)
-    """
-    now = datetime.now(timezone.utc)
-    exp = now + timedelta(minutes=settings.jwt_exp_minutes)
-    payload = {
-        "sub": subject,
-        "iat": int(now.timestamp()),
-        "exp": int(exp.timestamp()),
-    }
-    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
-
-
-def decode_access_token(token: str) -> str:
-    """Decode a JWT and return the subject (user ID).
-
-    Raises HTTPException 401 if token is invalid or expired.
+    Raises HTTPException 401 if the token is invalid, expired, or revoked.
     """
     try:
-        payload = jwt.decode(
-            token, settings.jwt_secret, algorithms=[settings.jwt_algorithm]
-        )
-        subject: str | None = payload.get("sub")
-        if subject is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Token missing subject",
-            )
-        return subject
-    except JWTError:
+        decoded = firebase_auth.verify_id_token(id_token)
+        return decoded
+    except firebase_auth.ExpiredIdTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail="Firebase token has expired",
+        )
+    except firebase_auth.RevokedIdTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Firebase token has been revoked",
+        )
+    except firebase_auth.InvalidIdTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid Firebase token",
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not verify Firebase token",
         )
 
 
@@ -75,6 +54,9 @@ def get_current_user_id(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
 ) -> str:
     """FastAPI dependency — extract and validate the current user ID from Bearer token.
+
+    The Bearer token is a Firebase ID token sent by the mobile app.
+    Returns the Firebase UID (used as the primary user identifier).
 
     Usage in endpoints:
         @router.get("/protected")
@@ -86,4 +68,11 @@ def get_current_user_id(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Authorization header missing",
         )
-    return decode_access_token(credentials.credentials)
+    decoded = verify_firebase_token(credentials.credentials)
+    uid = decoded.get("uid")
+    if not uid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing user ID",
+        )
+    return uid

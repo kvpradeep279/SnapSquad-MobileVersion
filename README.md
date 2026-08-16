@@ -1,6 +1,6 @@
-# SnapSquad V2
+# Plexida V2
 
-SnapSquad is a face-based group photo organization app that preserves privacy. All face detection and embedding extraction happens locally on the mobile device. The backend acts as a blind coordinator, running HDBSCAN clustering on protected embeddings and storing AES-256 encrypted photo blobs.
+Plexida is a face-based group photo organization app that preserves privacy. All face detection and embedding extraction happens locally on the mobile device. The backend acts as a blind coordinator, running HDBSCAN clustering on protected embeddings and storing AES-256 encrypted photo blobs.
 
 ## 🛠 Prerequisites
 
@@ -58,7 +58,7 @@ To run this project locally, your machine **must** have the following installed:
 
 1. **Navigate to the project root:**
    ```bash
-   cd .. # (back to the root snapsquad-app folder)
+   cd .. # (back to the root Plexida-app folder)
    ```
 
 2. **Install dependencies:**

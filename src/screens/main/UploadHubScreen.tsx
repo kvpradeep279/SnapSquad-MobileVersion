@@ -48,7 +48,7 @@ export default function UploadHubScreen() {
       try {
         const parsed = JSON.parse(result.qr_payload);
         const roomKey = parsed.room_key || result.room_id;
-        await SecureStore.setItemAsync(`snapsquad_room_key_${result.room_id}`, roomKey);
+        await SecureStore.setItemAsync(`Plexida_room_key_${result.room_id}`, roomKey);
       } catch (e) {
         console.warn('[Room] Could not save room_key to SecureStore:', e);
       }

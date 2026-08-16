@@ -1,63 +1,85 @@
 """
-Authentication endpoints — signup and login.
+Authentication endpoints — Firebase token exchange and user management.
 
-V1: Email + password with JWT tokens.
-V2: Will add Google OAuth (POST /auth/google).
+FLOW:
+    1. Mobile app signs in via Google Sign-In → gets a Firebase ID token.
+    2. App sends the Firebase ID token to POST /auth/firebase.
+    3. Backend verifies the token via Firebase Admin SDK.
+    4. Backend creates a User row on first login (upsert pattern).
+    5. Returns the UserProfile.
+
+All subsequent API requests use the Firebase ID token as the Bearer token,
+verified by the get_current_user_id() dependency in security.py.
 """
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import create_access_token, get_current_user_id, hash_password, verify_password
+from app.core.security import get_current_user_id, verify_firebase_token
 from app.db.session import get_db
 from app.models.user import User
-from app.schemas.auth import AuthResponse, LoginRequest, SignupRequest, UserProfile, UpdateProfileRequest
+from app.schemas.auth import FirebaseAuthRequest, UserProfile, UpdateProfileRequest
 
 router = APIRouter()
 
 
-@router.post("/signup", response_model=AuthResponse)
-def signup(payload: SignupRequest, db: Session = Depends(get_db)):
-    """Register a new user.
+@router.post("/firebase", response_model=UserProfile)
+def firebase_auth(payload: FirebaseAuthRequest, db: Session = Depends(get_db)):
+    """Exchange a Firebase ID token for a Plexida user profile.
 
-    Returns a JWT access token on success.
-    Rejects if email or username already exists.
+    On first login, automatically creates a new User record using the
+    profile info from the Firebase/Google account.
+
+    On subsequent logins, returns the existing user profile.
     """
-    exists = db.scalar(
-        select(User).where(
-            (User.email == payload.email) | (User.username == payload.username)
+    # Verify the Firebase ID token server-side
+    decoded = verify_firebase_token(payload.id_token)
+    firebase_uid = decoded["uid"]
+    email = decoded.get("email", "")
+    name = decoded.get("name", "")
+    picture = decoded.get("picture", "")
+
+    # Check if user already exists
+    user = db.get(User, firebase_uid)
+
+    if user:
+        # Existing user — update cached Google profile fields if they changed
+        if name and user.display_name != name:
+            user.display_name = name
+        if picture and user.photo_url != picture:
+            user.photo_url = picture
+        db.commit()
+    else:
+        # First login — create new user
+        # Generate a username from the email prefix (ensure uniqueness)
+        base_username = email.split("@")[0] if email else f"user_{firebase_uid[:8]}"
+        username = base_username
+
+        # Check for username collisions and append a suffix if needed
+        counter = 1
+        while db.scalar(select(User).where(User.username == username)):
+            username = f"{base_username}_{counter}"
+            counter += 1
+
+        user = User(
+            id=firebase_uid,
+            email=email,
+            username=username,
+            display_name=name or None,
+            photo_url=picture or None,
         )
+        db.add(user)
+        db.commit()
+
+    return UserProfile(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        display_name=user.display_name,
+        photo_url=user.photo_url,
     )
-    if exists:
-        raise HTTPException(status_code=400, detail="User already exists")
-
-    user = User(
-        email=payload.email,
-        username=payload.username,
-        password_hash=hash_password(payload.password),
-    )
-    db.add(user)
-    db.commit()
-    return AuthResponse(access_token=create_access_token(user.id))
-
-
-@router.post("/login", response_model=AuthResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
-    """Login with email + password.
-
-    Returns JWT access token. Used for authenticating all subsequent requests.
-    """
-    user = db.scalar(select(User).where(User.email == payload.email))
-    if not user or not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-    return AuthResponse(access_token=create_access_token(user.id))
-
-
-# V2: Google OAuth placeholder — not active in V1
-# @router.post("/google", response_model=AuthResponse)
-# def google_oauth(payload: GoogleAuthRequest, db: Session = Depends(get_db)):
-#     pass
 
 
 @router.get("/me", response_model=UserProfile)
@@ -69,7 +91,13 @@ def get_me(
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    return UserProfile(id=user.id, email=user.email, username=user.username)
+    return UserProfile(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        display_name=user.display_name,
+        photo_url=user.photo_url,
+    )
 
 
 @router.patch("/me", response_model=UserProfile)
@@ -78,24 +106,29 @@ def update_me(
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
 ):
-    """Update username or password for the current user."""
+    """Update username or display name for the current user."""
     user = db.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
     if payload.username is not None:
         # Check uniqueness
-        from sqlalchemy import select
         existing = db.scalar(select(User).where(User.username == payload.username))
         if existing and existing.id != user_id:
             raise HTTPException(status_code=400, detail="Username already taken")
         user.username = payload.username
 
-    if payload.password is not None:
-        user.password_hash = hash_password(payload.password)
+    if payload.display_name is not None:
+        user.display_name = payload.display_name
 
     db.commit()
-    return UserProfile(id=user.id, email=user.email, username=user.username)
+    return UserProfile(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        display_name=user.display_name,
+        photo_url=user.photo_url,
+    )
 
 
 @router.delete("/me/data")
@@ -149,7 +182,6 @@ def delete_all_user_data(
     return {"success": True, "message": "All data deleted"}
 
 
-from pydantic import BaseModel
 class PushTokenRequest(BaseModel):
     push_token: str
 
@@ -167,4 +199,3 @@ def update_push_token(
     user.push_token = payload.push_token
     db.commit()
     return {"success": True, "message": "Push token updated"}
-

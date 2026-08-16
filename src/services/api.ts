@@ -1,16 +1,23 @@
 /**
- * API Client — Axios instance with auth token interceptor.
+ * API Client — Axios instance with Firebase Auth token interceptor.
  *
  * All backend requests go through this client.
- * The Bearer token is automatically attached from SecureStore.
+ * The Firebase ID token is automatically attached to every request.
+ *
+ * ENVIRONMENT CONFIGURATION:
+ *   The API base URL is determined by the environment:
+ *   - Development: Your local machine's IP (set in app.json → extra.apiUrl)
+ *   - Production: Your Cloud Run URL
  */
 
 import axios from 'axios';
-import * as SecureStore from 'expo-secure-store';
+import Constants from 'expo-constants';
+import { getFirebaseIdToken } from './auth';
 
-// Use your machine's local IP so the phone on the same WiFi can connect.
-// Replace this with your computer's local IP address
-export const BASE_URL = 'http://192.168.1.5:8000/api/v1';
+// Read API URL from app.json → extra.apiUrl, with a fallback for dev
+const expoExtra = Constants.expoConfig?.extra ?? {};
+export const BASE_URL: string =
+  expoExtra.apiUrl || 'http://192.168.1.13:8000/api/v1';
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -27,22 +34,27 @@ export const setOnUnauthorized = (cb: () => void) => {
   onUnauthorizedCallback = cb;
 };
 
-// Attach JWT token to every request automatically
+// Attach Firebase ID token to every request automatically
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('auth_token');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  try {
+    const token = await getFirebaseIdToken();
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+  } catch (err) {
+    // If token retrieval fails, send request without auth header.
+    // The backend will return 401, which is handled by the response interceptor.
+    console.warn('[API] Failed to get Firebase token:', err);
   }
   return config;
 });
 
-// Handle 401 globally (token expired)
+// Handle 401 globally (token expired or invalid)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Token expired — the AuthContext will handle redirect to login
-      SecureStore.deleteItemAsync('auth_token');
+      // Token expired or invalid — the AuthContext will handle redirect to login
       if (onUnauthorizedCallback) onUnauthorizedCallback();
     }
     return Promise.reject(error);

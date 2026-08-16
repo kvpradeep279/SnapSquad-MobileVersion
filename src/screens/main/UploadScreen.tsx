@@ -155,7 +155,7 @@ export default function UploadScreen() {
     let sharedRoomKey: string | undefined;
     if (roomId) {
       try {
-        sharedRoomKey = (await SecureStore.getItemAsync(`snapsquad_room_key_${roomId}`)) || roomId;
+        sharedRoomKey = (await SecureStore.getItemAsync(`Plexida_room_key_${roomId}`)) || roomId;
       } catch (e) {
         console.warn('[UPLOAD] Could not read room_key, falling back to roomId:', e);
         sharedRoomKey = roomId;

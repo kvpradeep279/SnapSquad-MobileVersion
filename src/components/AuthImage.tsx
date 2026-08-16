@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Image, ImageStyle, StyleProp, View } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
-import * as SecureStore from 'expo-secure-store';
+import { getFirebaseIdToken } from '../services/auth';
 
 interface AuthImageProps {
   url: string;
@@ -17,7 +17,7 @@ export default function AuthImage({ url, style, resizeMode = 'cover' }: AuthImag
 
     const downloadImage = async () => {
       try {
-        const token = await SecureStore.getItemAsync('auth_token');
+        const token = await getFirebaseIdToken();
         if (!token) return;
 
         // Extract photoId from URL: e.g. /albums/xxx/photos/yyy/raw → yyy

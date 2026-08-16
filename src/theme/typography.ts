@@ -1,7 +1,7 @@
 /**
- * SnapSquad Mockup Theme — Typography
+ * Plexida Mockup Theme — Typography
  * 
- * Exact fonts matching snapsquad_full_mockup.html
+ * Exact fonts matching Plexida_full_mockup.html
  */
 
 export const fontFamily = {

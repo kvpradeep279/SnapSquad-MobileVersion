@@ -5,6 +5,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider } from './src/context/AuthContext';
 import { AlbumProvider } from './src/context/AlbumContext';
 import AppNavigator from './src/navigation/AppNavigator';
+import { initializeFirebase } from './src/config/firebase';
+
+// Initialize Firebase services early in the app lifecycle
+initializeFirebase();
 
 // Load Mockup Fonts
 import { useFonts } from 'expo-font';

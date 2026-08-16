@@ -1,5 +1,5 @@
 """
-storage_backend.py — Smart storage dispatcher for SnapSquad.
+storage_backend.py — Smart storage dispatcher for Plexida.
 
 Automatically selects R2Store (production) or LocalStore (dev fallback)
 based on environment configuration.

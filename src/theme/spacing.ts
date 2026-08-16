@@ -1,5 +1,5 @@
 /**
- * SnapSquad Premium Theme — Spacing & Layout
+ * Plexida Premium Theme — Spacing & Layout
  * 
  * Standardized spacing grid and border radii.
  */

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, Image, ActivityIndicator, StyleSheet } from 'react-native';
 import { manipulateAsync } from 'expo-image-manipulator';
-import * as SecureStore from 'expo-secure-store';
+import { getFirebaseIdToken } from '../services/auth';
 import * as FileSystem from 'expo-file-system/legacy';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BASE_URL } from '../services/api';
@@ -34,7 +34,7 @@ export default function FaceAvatar({ albumId, photoId, bbox, size = 60, borderRa
       try {
         setLoading(true);
         setError(false);
-        const token = await SecureStore.getItemAsync('auth_token');
+        const token = await getFirebaseIdToken();
 
         const fileUrl = `${BASE_URL}/albums/${albumId}/photos/${photoId}/raw`;
         

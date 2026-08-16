@@ -1,5 +1,5 @@
 """
-SnapSquad Backend — FastAPI application factory.
+Plexida Backend — FastAPI application factory.
 
 ARCHITECTURE SUMMARY:
     This server is a BLIND COORDINATOR. It:

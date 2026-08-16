@@ -25,6 +25,7 @@ import { detectFaces } from '../../services/faceDetection';
 import { extractEmbedding } from '../../services/faceEmbedding';
 import { applyFeatureSubtraction } from '../../services/privacy';
 import * as SecureStore from 'expo-secure-store';
+import { getFirebaseIdToken } from '../../services/auth';
 import { downloadPhotos } from '../../utils/export';
 
 type NavProps = NativeStackNavigationProp<RootStackParamList>;
@@ -117,7 +118,7 @@ export default function FindMeScreen() {
       // Fetch shared room key — MUST match the key used during upload.
       let roomKey: string | undefined;
       try {
-        roomKey = (await SecureStore.getItemAsync(`snapsquad_room_key_${roomId}`)) || roomId;
+        roomKey = (await SecureStore.getItemAsync(`Plexida_room_key_${roomId}`)) || roomId;
       } catch {
         roomKey = roomId;
       }
@@ -165,7 +166,7 @@ export default function FindMeScreen() {
       return;
     }
 
-    const token = await SecureStore.getItemAsync('auth_token');
+    const token = await getFirebaseIdToken();
     let successCount = 0;
     let failCount = 0;
     let done = 0;
@@ -197,9 +198,9 @@ export default function FindMeScreen() {
 
     if (createdAssets.length > 0) {
       try {
-        const album = await MediaLibrary.getAlbumAsync('SnapSquad');
+        const album = await MediaLibrary.getAlbumAsync('Plexida');
         if (album === null) {
-          const newAlbum = await MediaLibrary.createAlbumAsync('SnapSquad', createdAssets[0], false);
+          const newAlbum = await MediaLibrary.createAlbumAsync('Plexida', createdAssets[0], false);
           if (createdAssets.length > 1) {
             await MediaLibrary.addAssetsToAlbumAsync(createdAssets.slice(1), newAlbum, false);
           }

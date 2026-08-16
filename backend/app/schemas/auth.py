@@ -1,41 +1,33 @@
 """
-Auth schemas — signup, login, and token responses.
+Auth schemas — Firebase authentication and user profile.
 
-V1: Email + password authentication.
-V2: May add Google OAuth token exchange.
+Authentication is handled by Firebase Auth (Google Sign-In on the client).
+The backend receives Firebase ID tokens and verifies them server-side.
 """
 
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel
 from typing import Optional
 
 
-class SignupRequest(BaseModel):
-    """New user registration."""
-    email: EmailStr
-    username: str
-    password: str
+class FirebaseAuthRequest(BaseModel):
+    """Firebase ID token sent from the mobile app after Google Sign-In.
 
-
-class LoginRequest(BaseModel):
-    """User login with email + password."""
-    email: EmailStr
-    password: str
-
-
-class AuthResponse(BaseModel):
-    """JWT token returned after successful auth."""
-    access_token: str
-    token_type: str = "bearer"
+    The backend verifies this token using the Firebase Admin SDK,
+    then creates or retrieves the corresponding User record.
+    """
+    id_token: str
 
 
 class UserProfile(BaseModel):
-    """Public profile info returned by GET /auth/me."""
+    """Public profile info returned by GET /auth/me and POST /auth/firebase."""
     id: str
     email: str
     username: str
+    display_name: str | None = None
+    photo_url: str | None = None
 
 
 class UpdateProfileRequest(BaseModel):
     """Fields the user can update via PATCH /auth/me."""
     username: Optional[str] = None
-    password: Optional[str] = None
+    display_name: Optional[str] = None

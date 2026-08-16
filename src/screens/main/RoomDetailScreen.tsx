@@ -16,6 +16,7 @@ import { listRoomPhotos, getRoomClusters, listMembers, getRoomStatus, RoomPhoto,
 import api from '../../services/api';
 import AuthImage from '../../components/AuthImage';
 import * as SecureStore from 'expo-secure-store';
+import { getFirebaseIdToken } from '../../services/auth';
 import FaceAvatar from '../../components/FaceAvatar';
 import ImageViewerModal from '../../components/ImageViewerModal';
 
@@ -131,7 +132,7 @@ export default function RoomDetailScreen() {
   }, [roomId]);
 
   useEffect(() => {
-    SecureStore.getItemAsync('auth_token').then(setAuthToken);
+    getFirebaseIdToken().then(setAuthToken);
     loadData();
   }, [loadData]);
 
@@ -307,8 +308,7 @@ export default function RoomDetailScreen() {
     
     const MediaLibrary = require('expo-media-library');
     const FileSystem = require('expo-file-system/legacy');
-    const SecureStore = require('expo-secure-store');
-    
+
     const { status } = await MediaLibrary.requestPermissionsAsync();
     if (status !== 'granted') {
       alert('Permission needed to save photos.');
@@ -316,7 +316,7 @@ export default function RoomDetailScreen() {
       return;
     }
 
-    const token = await SecureStore.getItemAsync('auth_token');
+    const token = await getFirebaseIdToken();
     let successCount = 0;
     let failCount = 0;
     let done = 0;
@@ -346,9 +346,9 @@ export default function RoomDetailScreen() {
 
     if (createdAssets.length > 0) {
       try {
-        const album = await MediaLibrary.getAlbumAsync('SnapSquad');
+        const album = await MediaLibrary.getAlbumAsync('Plexida');
         if (album === null) {
-          const newAlbum = await MediaLibrary.createAlbumAsync('SnapSquad', createdAssets[0], false);
+          const newAlbum = await MediaLibrary.createAlbumAsync('Plexida', createdAssets[0], false);
           if (createdAssets.length > 1) {
             await MediaLibrary.addAssetsToAlbumAsync(createdAssets.slice(1), newAlbum, false);
           }

@@ -1,8 +1,11 @@
 /**
- * AuthContext — Global authentication state.
+ * AuthContext — Global authentication state powered by Firebase Auth.
  *
- * Provides { isLoggedIn, isLoading, user, signIn, signUp, signOut, refreshUser } to all screens.
- * On app launch, checks SecureStore for an existing token and fetches /auth/me.
+ * Provides { isLoggedIn, isLoading, user, signInWithGoogle, signOut, refreshUser }
+ * to all screens.
+ *
+ * Uses Firebase's onAuthStateChanged listener to automatically track login state.
+ * No manual token management needed — Firebase handles token persistence and refresh.
  */
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
@@ -14,8 +17,7 @@ interface AuthState {
   isLoading: boolean;
   error: string | null;
   user: UserProfile | null;
-  signIn: (email: string, password: string) => Promise<boolean>;
-  signUp: (email: string, username: string, password: string) => Promise<boolean>;
+  signInWithGoogle: () => Promise<boolean>;
   signOut: () => Promise<void>;
   clearError: () => void;
   refreshUser: () => Promise<void>;
@@ -30,57 +32,55 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [user, setUser] = useState<UserProfile | null>(null);
 
-  // On mount: check token + fetch profile
+  // Listen to Firebase auth state changes
   useEffect(() => {
+    // Set up the 401 handler for API calls
     import('../services/api').then(({ setOnUnauthorized }) => {
       setOnUnauthorized(() => {
-        setIsLoggedIn(false);
-        setUser(null);
+        // Firebase token was rejected by backend — sign out
+        auth.signOut();
       });
     });
 
-    (async () => {
-      const token = await auth.getStoredToken();
-      if (token) {
+    // Firebase auth state listener — fires on sign-in, sign-out, and token refresh
+    const unsubscribe = auth.onAuthStateChanged(async (firebaseUser) => {
+      if (firebaseUser) {
+        // User is signed in — fetch their Plexida profile from the backend
         setIsLoggedIn(true);
-        const profile = await auth.fetchMe();
-        if (profile) setUser(profile);
+        try {
+          const profile = await auth.fetchMe();
+          if (profile) setUser(profile);
+        } catch {
+          // Backend might not be reachable yet — that's ok, profile will load on retry
+        }
+      } else {
+        // User is signed out
+        setIsLoggedIn(false);
+        setUser(null);
       }
       setIsLoading(false);
-    })();
+    });
+
+    return unsubscribe;
   }, []);
 
-  const signIn = async (email: string, password: string): Promise<boolean> => {
+  const signInWithGoogle = async (): Promise<boolean> => {
     setError(null);
-    const result = await auth.login(email, password);
+    const result = await auth.signInWithGoogle();
     if (result.success) {
-      setIsLoggedIn(true);
-      // Fetch profile after login
+      // onAuthStateChanged will fire and update isLoggedIn + user
+      // But let's also eagerly fetch the profile
       const profile = await auth.fetchMe();
       if (profile) setUser(profile);
       return true;
     }
-    setError(result.error || 'Login failed');
+    setError(result.error || 'Sign-in failed');
     return false;
   };
 
-  const signUp = async (email: string, username: string, password: string): Promise<boolean> => {
-    setError(null);
-    const result = await auth.signup(email, username, password);
-    if (result.success) {
-      setIsLoggedIn(true);
-      const profile = await auth.fetchMe();
-      if (profile) setUser(profile);
-      return true;
-    }
-    setError(result.error || 'Signup failed');
-    return false;
-  };
-
-  const signOut = async () => {
-    await auth.logout();
-    setIsLoggedIn(false);
-    setUser(null);
+  const handleSignOut = async () => {
+    await auth.signOut();
+    // onAuthStateChanged will fire and clear isLoggedIn + user
   };
 
   const refreshUser = async () => {
@@ -93,7 +93,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const clearError = () => setError(null);
 
   return (
-    <AuthContext.Provider value={{ isLoggedIn, isLoading, error, user, signIn, signUp, signOut, clearError, refreshUser, updateUser }}>
+    <AuthContext.Provider value={{
+      isLoggedIn,
+      isLoading,
+      error,
+      user,
+      signInWithGoogle,
+      signOut: handleSignOut,
+      clearError,
+      refreshUser,
+      updateUser,
+    }}>
       {children}
     </AuthContext.Provider>
   );

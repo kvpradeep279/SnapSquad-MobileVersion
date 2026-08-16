@@ -8,7 +8,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as SecureStore from 'expo-secure-store';
+import { getFirebaseIdToken } from '../../services/auth';
 import AnimatedBackground from '../../components/AnimatedBackground';
 import ConfirmModal from '../../components/ConfirmModal';
 import FaceAvatar from '../../components/FaceAvatar';
@@ -80,7 +80,7 @@ export default function ClusterDetailScreen() {
 
   useEffect(() => {
     const init = async () => {
-      const token = await SecureStore.getItemAsync('auth_token');
+      const token = await getFirebaseIdToken();
       setAuthToken(token);
       await fetchPhotos(token);
     };

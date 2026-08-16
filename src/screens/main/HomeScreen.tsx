@@ -5,6 +5,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Svg, { Path, Circle, Rect } from 'react-native-svg';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as SecureStore from 'expo-secure-store';
+import { getFirebaseIdToken } from '../../services/auth';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import AnimatedBackground from '../../components/AnimatedBackground';
@@ -78,7 +79,7 @@ export default function HomeScreen() {
   };
 
   useEffect(() => {
-    SecureStore.getItemAsync('auth_token').then(setAuthToken);
+    getFirebaseIdToken().then(setAuthToken);
     refreshAlbums();
     registerForPushNotificationsAsync();
     

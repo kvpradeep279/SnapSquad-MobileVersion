@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "SnapSquad",
-    "slug": "snapsquad",
+    "name": "Plexida",
+    "slug": "plexida",
     "version": "1.0.0",
     "orientation": "portrait",
     "plugins": [
@@ -15,18 +15,23 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "@react-native-firebase/app",
+      "@react-native-firebase/auth",
+      "@react-native-google-signin/google-signin"
     ],
     "android": {
-      "package": "com.yourteam.snapsquad",
+      "package": "Orlume.com",
+      "googleServicesFile": "./google-services.json",
       "permissions": [
         "READ_MEDIA_IMAGES",
         "CAMERA"
       ]
     },
     "extra": {
+      "apiUrl": "http://192.168.0.111:8000/api/v1",
       "eas": {
-        "projectId": "773725a7-1473-486e-a377-f5bfc47607cb"
+        "projectId": "83ce523c-11af-4860-a9bc-5ca7d4c740e5"
       }
     }
   }

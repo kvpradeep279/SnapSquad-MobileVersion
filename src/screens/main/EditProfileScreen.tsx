@@ -18,13 +18,7 @@ export default function EditProfileScreen() {
   const { user, updateUser } = useAuth();
 
   const [username, setUsername] = useState(user?.username || '');
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [saving, setSaving] = useState(false);
-  const [showCurrentPw, setShowCurrentPw] = useState(false);
-  const [showNewPw, setShowNewPw] = useState(false);
-  const [showConfirmPw, setShowConfirmPw] = useState(false);
 
   const avatarLetter = (user?.username?.[0] || user?.email?.[0] || '?').toUpperCase();
 
@@ -36,22 +30,7 @@ export default function EditProfileScreen() {
       payload.username = username.trim();
     }
 
-    // Password change
-    if (newPassword || currentPassword) {
-      if (!currentPassword) {
-        Alert.alert('Required', 'Enter your current password to set a new one.');
-        return;
-      }
-      if (newPassword.length < 6) {
-        Alert.alert('Too short', 'New password must be at least 6 characters.');
-        return;
-      }
-      if (newPassword !== confirmPassword) {
-        Alert.alert('Mismatch', 'New passwords do not match.');
-        return;
-      }
-      payload.password = newPassword;
-    }
+
 
     if (Object.keys(payload).length === 0) {
       Alert.alert('No changes', 'Nothing was changed.');
@@ -117,62 +96,7 @@ export default function EditProfileScreen() {
             />
           </GlassCard>
 
-          {/* Change Password */}
-          <Text style={[styles.sectionLabel, { marginTop: 18 }]}>Change Password</Text>
 
-          <GlassCard style={styles.inputCard}>
-            <Svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ marginRight: 10 }}>
-              <Path d="M4 6V4a3 3 0 016 0v2" stroke={palette.muted} strokeWidth="1.3" strokeLinecap="round"/>
-              <Path d="M2 6h10a1 1 0 011 1v5a1 1 0 01-1 1H2a1 1 0 01-1-1V7a1 1 0 011-1z" stroke={palette.muted} strokeWidth="1.3"/>
-            </Svg>
-            <TextInput
-              style={styles.input}
-              value={currentPassword}
-              onChangeText={setCurrentPassword}
-              placeholder="Current password"
-              placeholderTextColor={palette.muted}
-              secureTextEntry={!showCurrentPw}
-            />
-            <TouchableOpacity onPress={() => setShowCurrentPw(v => !v)}>
-              <Text style={styles.eyeBtn}>{showCurrentPw ? 'Hide' : 'Show'}</Text>
-            </TouchableOpacity>
-          </GlassCard>
-
-          <GlassCard style={[styles.inputCard, { marginTop: 6 }]}>
-            <Svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ marginRight: 10 }}>
-              <Path d="M4 6V4a3 3 0 016 0v2" stroke={palette.muted} strokeWidth="1.3" strokeLinecap="round"/>
-              <Path d="M2 6h10a1 1 0 011 1v5a1 1 0 01-1 1H2a1 1 0 01-1-1V7a1 1 0 011-1z" stroke={palette.muted} strokeWidth="1.3"/>
-            </Svg>
-            <TextInput
-              style={styles.input}
-              value={newPassword}
-              onChangeText={setNewPassword}
-              placeholder="New password"
-              placeholderTextColor={palette.muted}
-              secureTextEntry={!showNewPw}
-            />
-            <TouchableOpacity onPress={() => setShowNewPw(v => !v)}>
-              <Text style={styles.eyeBtn}>{showNewPw ? 'Hide' : 'Show'}</Text>
-            </TouchableOpacity>
-          </GlassCard>
-
-          <GlassCard style={[styles.inputCard, { marginTop: 6 }]}>
-            <Svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ marginRight: 10 }}>
-              <Path d="M4 6V4a3 3 0 016 0v2" stroke={palette.muted} strokeWidth="1.3" strokeLinecap="round"/>
-              <Path d="M2 6h10a1 1 0 011 1v5a1 1 0 01-1 1H2a1 1 0 01-1-1V7a1 1 0 011-1z" stroke={palette.muted} strokeWidth="1.3"/>
-            </Svg>
-            <TextInput
-              style={styles.input}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Confirm new password"
-              placeholderTextColor={palette.muted}
-              secureTextEntry={!showConfirmPw}
-            />
-            <TouchableOpacity onPress={() => setShowConfirmPw(v => !v)}>
-              <Text style={styles.eyeBtn}>{showConfirmPw ? 'Hide' : 'Show'}</Text>
-            </TouchableOpacity>
-          </GlassCard>
 
           {/* Save button */}
           <TouchableOpacity style={styles.saveBtn} onPress={handleSave} disabled={saving}>

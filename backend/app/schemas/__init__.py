@@ -3,7 +3,7 @@ Schema registry — re-exports all Pydantic schemas for convenient imports.
 """
 
 from app.schemas.common import ApiResponse
-from app.schemas.auth import AuthResponse, LoginRequest, SignupRequest
+from app.schemas.auth import FirebaseAuthRequest, UserProfile, UpdateProfileRequest
 from app.schemas.album import AlbumCreateRequest, AlbumCreateResponse, AlbumStatusResponse
 from app.schemas.photo import FaceEmbeddingPayload, PhotoUploadRequest, PhotoUploadResponse
 from app.schemas.cluster import (
@@ -20,9 +20,9 @@ __all__ = [
     # Common
     "ApiResponse",
     # Auth
-    "SignupRequest",
-    "LoginRequest",
-    "AuthResponse",
+    "FirebaseAuthRequest",
+    "UserProfile",
+    "UpdateProfileRequest",
     # Album
     "AlbumCreateRequest",
     "AlbumCreateResponse",

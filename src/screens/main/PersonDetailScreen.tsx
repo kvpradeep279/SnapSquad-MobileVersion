@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Svg, { Path } from 'react-native-svg';
-import * as SecureStore from 'expo-secure-store';
+import { getFirebaseIdToken } from '../../services/auth';
 
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
@@ -36,7 +36,7 @@ export default function PersonDetailScreen() {
     let isMounted = true;
     const fetchPhotos = async () => {
       try {
-        const token = await SecureStore.getItemAsync('auth_token');
+        const token = await getFirebaseIdToken();
         if (isMounted) setAuthToken(token);
 
         const data = await getPersonPhotos(personName);

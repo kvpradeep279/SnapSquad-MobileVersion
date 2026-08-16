@@ -56,8 +56,8 @@ export default function RoomQRScreen() {
   async function handleShare() {
     try {
       await Share.share({
-        message: `Join my SnapSquad room "${roomName}"!\n\nRoom ID: ${roomId}\n\n(Copy the Room ID above and select "Join a Room" in the SnapSquad app)`,
-        title: `Join ${roomName} on SnapSquad`,
+        message: `Join my Plexida room "${roomName}"!\n\nRoom ID: ${roomId}\n\n(Copy the Room ID above and select "Join a Room" in the Plexida app)`,
+        title: `Join ${roomName} on Plexida`,
       });
     } catch {
       Alert.alert('Error', 'Could not share room link.');

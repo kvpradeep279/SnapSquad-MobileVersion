@@ -48,7 +48,7 @@ import * as Crypto from 'expo-crypto';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const PRIVATE_KEY_STORE_KEY = 'snapsquad_permutation_key_v1';
+const PRIVATE_KEY_STORE_KEY = 'Plexida_permutation_key_v1';
 const EMBEDDING_DIM = 512;
 
 // In-memory cache — key is loaded from SecureStore once and reused for

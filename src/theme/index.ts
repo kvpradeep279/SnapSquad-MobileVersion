@@ -1,5 +1,5 @@
 /**
- * SnapSquad Premium Theme Hub
+ * Plexida Premium Theme Hub
  */
 
 export * from './colors';

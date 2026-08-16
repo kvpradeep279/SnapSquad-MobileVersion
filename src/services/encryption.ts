@@ -29,7 +29,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const SESSION_KEY_STORE_KEY = 'snapsquad_session_key_v1';
+const SESSION_KEY_STORE_KEY = 'Plexida_session_key_v1';
 const AES_KEY_BYTES  = 32;   // 256-bit key
 const AES_BLOCK_SIZE = 16;   // AES block size (128-bit)
 
